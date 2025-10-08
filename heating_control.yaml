@@ -79,6 +79,7 @@ variables:
   heating_on_off: !input heating_on_off
   schedule_entity: !input schedule_entity
   scheduler_enabled: !input scheduler_enabled
+  heating_entity_id: "{{ device_attr(!input heating_entities, 'entity_id') }}"
 
   # Logik-Variablen
   is_heating_season: "{{ states(heating_on_off) == 'on' }}"
@@ -125,7 +126,7 @@ action:
           - service: scene.create
             data:
               scene_id: heating_restore_state
-              snapshot_entities: "{{ (device_attr(!input heating_entities, 'entity_id')) | list }}"
+              snapshot_entities: "{{ heating_entity_id }}"
           - service: climate.set_temperature
             target: !input heating_entities
             data:
