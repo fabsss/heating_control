@@ -83,7 +83,7 @@ variables:
   # Logik-Variablen
   is_heating_season: "{{ states(heating_on_off) == 'on' }}"
   is_scheduler_active: "{{ scheduler_enabled and (schedule_entity is not none and states(schedule_entity) == 'on') }}"
-  was_home_before: "{{ trigger.from_state.state == 'Home' }}"
+  was_home_before: "{{ trigger.from_state.state in ['Home', 'Leaving'] }}"
 
 # Trigger: Löst bei jeder relevanten Änderung aus
 trigger:
@@ -130,13 +130,15 @@ action:
             data:
               hvac_mode: heat
               
-      # --- SONDERFALL: NÄCHTLICHE ECO-UMSCHALTUNG IM GASTMODUS ---
+      # --- NÄCHTLICHE ECO-UMSCHALTUNG IM GASTMODUS UND HOME ---
       - conditions:
           - condition: trigger
             id: "nightly_eco_time"
           - condition: state
             entity_id: !input flat_occupation_state
-            state: "Guest Mode"
+            state: 
+              - "Guest Mode"
+              - "Home"
           - condition: template
             value_template: "{{ state_attr(heating_entities.entity_id[0], 'hvac_action') != 'off' }}"
         sequence:
@@ -158,7 +160,6 @@ action:
           - condition: state
             entity_id: !input flat_occupation_state
             state:
-              - "Leaving"
               - "Away"
         sequence:
           - service: scene.create
