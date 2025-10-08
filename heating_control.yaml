@@ -164,7 +164,7 @@ action:
         sequence:
           - service: scene.create
             target:
-              entity_id: scene.heating_restore_state
+              entity_id: heating_restore_state
             data:
               snapshot_entities: !input heating_entities
               
@@ -211,4 +211,4 @@ action:
             target:
               entity_id: "{{ automation_id }}"
             data:
-              skip_condition_check: false
+              skip_condition: true
