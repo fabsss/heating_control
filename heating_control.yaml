@@ -125,7 +125,7 @@ action:
           - service: scene.create
             data:
               scene_id: heating_restore_state
-              snapshot_entities: "{{ !input heating_entities.entity_id }}"
+              snapshot_entities: "{{ (device_attr(!input heating_entities, 'entity_id')) | list }}"
           - service: climate.set_temperature
             target: !input heating_entities
             data:
