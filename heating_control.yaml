@@ -177,12 +177,13 @@ action:
               - "Coming Home"
               - "Home"
           - condition: template
-            value_template: "{{ trigger.from_state.state in ['Away', 'Coming Home'] }}"
+            value_template: "{{ trigger.from_state.state == 'Away' }}"
+          - condition: template
+            value_template: "{{ states('scene.heating_restore_state') != 'unavailable' }}"
         sequence:
           - service: scene.turn_on
             target:
               entity_id: scene.heating_restore_state
-              
     # --- STANDARD-LOGIK (WIRD AUSGEFÜHRT, WENN KEINE DER OBIGEN BEDINGUNGEN ZUTRIFFT) ---
     default:
       - if:
