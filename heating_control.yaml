@@ -1,5 +1,5 @@
 blueprint:
-  name: Robuste Heizungssteuerung nach Anwesenheit (V2.3)
+  name: Robuste Heizungssteuerung nach Anwesenheit (V2.4)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -167,7 +167,7 @@ action:
               scene_id: heating_restore_state
               snapshot_entities: !input heating_entities
               
-      # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT ---
+      # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT (NUR NACH AWAY) ---
       - conditions:
           - condition: trigger
             id: "occupation_change"
@@ -177,7 +177,7 @@ action:
               - "Coming Home"
               - "Home"
           - condition: template
-            value_template: "{{ trigger.from_state.state not in ['Coming Home', 'Guest Mode', 'Vacation'] }}"
+            alue_template: "{{ trigger.from_state.state in ['Away', 'Coming Home'] }}"
         sequence:
           - service: scene.turn_on
             target:
