@@ -1,5 +1,5 @@
 blueprint:
-  name: Robuste Heizungssteuerung nach Anwesenheit (V2.5)
+  name: Robuste Heizungssteuerung nach Anwesenheit (V2.6)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -111,14 +111,37 @@ action:
           - service: climate.turn_off
             target: !input heating_entities
 
-      # --- ZWEITE PRIORITÄT: ABWESENHEIT & SCHLAFEN (IMMER ECO) ---
+      # --- ZWEITE PRIORITÄT: ZUSTAND SPEICHERN UND ECO BEIM VERLASSEN ---
+      - conditions:
+          - condition: trigger
+            id: "occupation_change"
+          - condition: template
+            value_template: "{{ was_home_before }}"
+          - condition: state
+            entity_id: !input flat_occupation_state
+            state:
+              - "Away"
+        sequence:
+          - service: scene.create
+            data:
+              scene_id: heating_restore_state
+              snapshot_entities: !input heating_entities
+          - service: climate.set_temperature
+            target: !input heating_entities
+            data:
+              temperature: !input eco_temperature
+          - service: climate.set_hvac_mode
+            target: !input heating_entities
+            data:
+              hvac_mode: heat
+
+      # --- DRITTE PRIORITÄT: ECO BEI SLEEP ---
       - conditions:
           - condition: trigger
             id: "occupation_change"
           - condition: state
             entity_id: !input flat_occupation_state
             state:
-              - "Away"
               - "Sleep"
         sequence:
           - service: climate.set_temperature
@@ -151,21 +174,7 @@ action:
             data:
               hvac_mode: heat
 
-      # --- ZUSTAND SPEICHERN BEIM VERLASSEN ---
-      - conditions:
-          - condition: trigger
-            id: "occupation_change"
-          - condition: template
-            value_template: "{{ was_home_before }}"
-          - condition: state
-            entity_id: !input flat_occupation_state
-            state:
-              - "Away"
-        sequence:
-          - service: scene.create
-            data:
-              scene_id: heating_restore_state
-              snapshot_entities: !input heating_entities
+
               
       # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT (NUR NACH AWAY) ---
       - conditions:
