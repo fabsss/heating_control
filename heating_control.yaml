@@ -47,16 +47,19 @@ blueprint:
     # Optionaler Scheduler
     scheduler_enabled:
       name: Scheduler aktivieren
-      description: Wenn aktiviert, wird eine Helfer-Variable für den Zeitplan verwendet.
+      description: Wenn aktiviert, wird der Zeitplan für die Komfort-Temperatur verwendet.
       default: false
       selector:
         boolean: {}
-    scheduler_boolean:
-      name: (Optional) Scheduler-Schalter
-      description: Input Boolean, der anzeigt, ob der Zeitplan gerade aktiv ist.
+    schedule_entity:
+      name: (Optional) Zeitplan
+      description: Schedule-Helper für die Komforttemperatur-Zeiten. Wird nur benötigt, wenn der Scheduler aktiviert ist.
+      default: null
       selector:
         entity:
-          domain: input_boolean
+          domain: schedule
+          multiple: false
+          required: false
           
     # Optionaler täglicher Reset
     daily_eco_time:
@@ -75,12 +78,12 @@ variables:
   heating_entities: !input heating_entities
   flat_occupation_state: !input flat_occupation_state
   heating_on_off: !input heating_on_off
-  scheduler_boolean: !input scheduler_boolean
+  schedule_entity: !input schedule_entity
   scheduler_enabled: !input scheduler_enabled
 
   # Logik-Variablen
   is_heating_season: "{{ states(heating_on_off) == 'on' }}"
-  is_scheduler_active: "{{ scheduler_enabled and states(scheduler_boolean) == 'on' }}"
+  is_scheduler_active: "{{ scheduler_enabled and (schedule_entity is not none and states(schedule_entity) == 'on') }}"
   was_home_before: "{{ trigger.from_state.state == 'Home' }}"
 
 # Trigger: Löst bei jeder relevanten Änderung aus
@@ -92,8 +95,8 @@ trigger:
     entity_id: !input heating_on_off
     id: "heating_toggle"
   - platform: state
-    entity_id: !input scheduler_boolean
-    id: "scheduler_change"
+    entity_id: !input schedule_entity
+    id: "schedule_change"
   - platform: time
     at: !input daily_eco_time
     id: "nightly_eco_time"
