@@ -79,7 +79,7 @@ variables:
   heating_on_off: !input heating_on_off
   schedule_entity: !input schedule_entity
   scheduler_enabled: !input scheduler_enabled
-  heating_entity_id: "{{ device_attr(!input heating_entities, 'entity_id') }}"
+  heating_entity_id: "{{ expand(heating_entities.entity_id) | map(attribute='entity_id') | list }}"
 
   # Logik-Variablen
   is_heating_season: "{{ states(heating_on_off) == 'on' }}"
