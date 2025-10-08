@@ -55,11 +55,11 @@ blueprint:
       name: (Optional) Zeitplan
       description: Schedule-Helper für die Komforttemperatur-Zeiten. Wird nur benötigt, wenn der Scheduler aktiviert ist.
       default: null
+      required: false
       selector:
         entity:
           domain: schedule
           multiple: false
-          required: false
           
     # Optionaler täglicher Reset
     daily_eco_time:
