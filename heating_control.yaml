@@ -163,9 +163,8 @@ action:
               - "Away"
         sequence:
           - service: scene.create
-            target:
-              entity_id: heating_restore_state
             data:
+              scene_id: heating_restore_state
               snapshot_entities: !input heating_entities
               
       # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT (NUR NACH AWAY) ---
