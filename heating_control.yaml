@@ -177,7 +177,7 @@ action:
               - "Coming Home"
               - "Home"
           - condition: template
-            alue_template: "{{ trigger.from_state.state in ['Away', 'Coming Home'] }}"
+            value_template: "{{ trigger.from_state.state in ['Away', 'Coming Home'] }}"
         sequence:
           - service: scene.turn_on
             target:
