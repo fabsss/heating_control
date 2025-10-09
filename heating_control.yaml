@@ -98,11 +98,11 @@ trigger:
     entity_id: !input flat_occupation_state
     id: "occupation_change"
   - platform: state
-    entity_id: "{{ heating_on_off_entity }}"
+    entity_id: !input heating_on_off
     id: "heating_toggle"
     enabled: "{{ heating_on_off is not none }}"
   - platform: state
-    entity_id: "{{ schedule_entity_id }}"
+    entity_id: !input schedule_entity
     id: "schedule_change"
     enabled: "{{ scheduler_enabled and schedule_entity is not none }}"
   - platform: time
