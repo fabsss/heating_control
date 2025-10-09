@@ -87,6 +87,8 @@ variables:
 
   # Logik-Variablen
   is_heating_season: "{{ heating_on_off is not none and states(heating_on_off) == 'on' or heating_on_off is none }}"
+  heating_on_off_entity: "{{ heating_on_off if heating_on_off is not none else '' }}"
+  schedule_entity_id: "{{ schedule_entity if schedule_entity is not none else '' }}"
   is_scheduler_active: "{{ scheduler_enabled and schedule_entity is not none and states(schedule_entity) == 'on' }}"
   was_home_before: "{{ trigger.from_state.state in ['Home', 'Leaving'] }}"
 
@@ -96,13 +98,13 @@ trigger:
     entity_id: !input flat_occupation_state
     id: "occupation_change"
   - platform: state
-    entity_id: !input heating_on_off
+    entity_id: "{{ heating_on_off_entity }}"
     id: "heating_toggle"
     enabled: "{{ heating_on_off is not none }}"
   - platform: state
-    entity_id: !input schedule_entity
+    entity_id: "{{ schedule_entity_id }}"
     id: "schedule_change"
-    enabled: "{{ scheduler_enabled }}"
+    enabled: "{{ scheduler_enabled and schedule_entity is not none }}"
   - platform: time
     at: !input daily_eco_time
     id: "nightly_eco_time"
