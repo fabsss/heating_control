@@ -113,7 +113,8 @@ action:
               {{ not is_heating_season or is_state(flat_occupation_state, 'Vacation') }}
         sequence:
           - service: climate.turn_off
-            target: !input heating_entities
+            target:
+              entity_id: !input heating_entities
 
       # --- ZWEITE PRIORITÄT: ZUSTAND SPEICHERN UND ECO BEIM VERLASSEN ---
       - conditions:
@@ -129,13 +130,15 @@ action:
           - service: scene.create
             data:
               scene_id: heating_restore_state
-              snapshot_entities: "{{ heating_entities.entity_id }}"
+              snapshot_entities: "{{ heating_entities }}"
           - service: climate.set_temperature
-            target: !input heating_entities
+            target:
+              entity_id: !input heating_entities
             data:
               temperature: !input eco_temperature
           - service: climate.set_hvac_mode
-            target: !input heating_entities
+            target:
+              entity_id: !input heating_entities
             data:
               hvac_mode: heat
 
@@ -149,11 +152,13 @@ action:
               - "Sleep"
         sequence:
           - service: climate.set_temperature
-            target: !input heating_entities
+            target:
+              entity_id: !input heating_entities
             data:
               temperature: !input eco_temperature
           - service: climate.set_hvac_mode
-            target: !input heating_entities
+            target:
+              entity_id: !input heating_entities
             data:
               hvac_mode: heat
               
@@ -167,14 +172,16 @@ action:
               - "Guest Mode"
               - "Home"
           - condition: template
-            value_template: "{{ state_attr(heating_entities.entity_id[0], 'hvac_action') != 'off' }}"
+            value_template: "{{ state_attr(heating_entities, 'hvac_action') != 'off' }}"
         sequence:
           - service: climate.set_temperature
-            target: !input heating_entities
+            target:
+              entity_id: !input heating_entities
             data:
               temperature: !input eco_temperature
           - service: climate.set_hvac_mode
-            target: !input heating_entities
+            target:
+              entity_id: !input heating_entities
             data:
               hvac_mode: heat
 
@@ -205,11 +212,13 @@ action:
             value_template: "{{ is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
         then:
           - service: climate.set_temperature
-            target: !input heating_entities
+            target:
+              entity_id: !input heating_entities
             data:
               temperature: !input comfort_temperature
           - service: climate.set_hvac_mode
-            target: !input heating_entities
+            target:
+              entity_id: !input heating_entities
             data:
               hvac_mode: heat
       - if:
