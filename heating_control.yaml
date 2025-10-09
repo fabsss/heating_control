@@ -1,16 +1,16 @@
 blueprint:
-  name: Heizungssteuerung (V2.7)
+  name: Heizungssteuerung (V2.8)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
   input:
     heating_entities:
       name: Heizkörper
-      description: Die zu steuernden Heizkörperthermostate.
+      description: Der zu steuernde Heizkörperthermostat.
       selector:
-        target:
-          entity:
-            domain: climate
+        entity:
+          domain: climate
+          multiple: false
     flat_occupation_state:
       name: Anwesenheitsstatus
       description: Input Select, der den Status der Wohnung abbildet (z.B. Home, Away, Sleep).
@@ -18,11 +18,13 @@ blueprint:
         entity:
           domain: input_select
     heating_on_off:
-      name: Heizung An/Aus (Winter-Modus)
-      description: Input Boolean, der die Heizungssteuerung global aktiviert oder deaktiviert.
+      name: (Optional) Heizung An/Aus (Winter-Modus)
+      description: Optional - Input Boolean, der die Heizungssteuerung global aktiviert oder deaktiviert. Wenn nicht gesetzt, ist die Heizung immer aktiv.
+      default: null
       selector:
         entity:
           domain: input_boolean
+          multiple: false
     eco_temperature:
       name: Eco-Temperatur
       description: Die Temperatur in °C für die Modi "Away", "Sleep" und nachts im "Guest Mode".
@@ -81,8 +83,8 @@ variables:
   scheduler_enabled: !input scheduler_enabled
 
   # Logik-Variablen
-  is_heating_season: "{{ states(heating_on_off) == 'on' }}"
-  is_scheduler_active: "{{ scheduler_enabled and (schedule_entity is not none and states(schedule_entity) == 'on') }}"
+  is_heating_season: "{{ heating_on_off is not none and states(heating_on_off) == 'on' or heating_on_off is none }}"
+  is_scheduler_active: "{{ scheduler_enabled and schedule_entity is not none and states(schedule_entity) == 'on' }}"
   was_home_before: "{{ trigger.from_state.state in ['Home', 'Leaving'] }}"
 
 # Trigger: Löst bei jeder relevanten Änderung aus
@@ -93,9 +95,11 @@ trigger:
   - platform: state
     entity_id: !input heating_on_off
     id: "heating_toggle"
+    enabled: "{{ heating_on_off is not none }}"
   - platform: state
     entity_id: !input schedule_entity
     id: "schedule_change"
+    enabled: "{{ scheduler_enabled }}"
   - platform: time
     at: !input daily_eco_time
     id: "nightly_eco_time"
