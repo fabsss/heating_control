@@ -114,7 +114,7 @@ action:
         sequence:
           - service: climate.turn_off
             target:
-              entity_id: !input heating_entities
+              entity_id: "{{ heating_entities }}"
 
       # --- ZWEITE PRIORITÄT: ZUSTAND SPEICHERN UND ECO BEIM VERLASSEN ---
       - conditions:
@@ -153,12 +153,12 @@ action:
         sequence:
           - service: climate.set_temperature
             target:
-              entity_id: !input heating_entities
+              entity_id: "{{ heating_entities }}"
             data:
               temperature: !input eco_temperature
           - service: climate.set_hvac_mode
             target:
-              entity_id: !input heating_entities
+              entity_id: "{{ heating_entities }}"
             data:
               hvac_mode: heat
               
@@ -176,12 +176,12 @@ action:
         sequence:
           - service: climate.set_temperature
             target:
-              entity_id: !input heating_entities
+              entity_id: "{{ heating_entities }}"
             data:
               temperature: !input eco_temperature
           - service: climate.set_hvac_mode
             target:
-              entity_id: !input heating_entities
+              entity_id: "{{ heating_entities }}"
             data:
               hvac_mode: heat
 
@@ -213,12 +213,12 @@ action:
         then:
           - service: climate.set_temperature
             target:
-              entity_id: !input heating_entities
+              entity_id: "{{ heating_entities }}"
             data:
               temperature: !input comfort_temperature
           - service: climate.set_hvac_mode
             target:
-              entity_id: !input heating_entities
+              entity_id: "{{ heating_entities }}"
             data:
               hvac_mode: heat
       - if:
