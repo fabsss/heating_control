@@ -132,7 +132,7 @@ action:
         sequence:
           - service: scene.create
             data:
-              scene_id: "heating_restore_{{ heating_entities }}"
+              scene_id: "heating_restore_{{ heating_entities | replace('.', '_') }}"
               snapshot_entities: "{{ heating_entities }}"
           - service: climate.set_temperature
             target:
@@ -202,11 +202,11 @@ action:
           - condition: template
             value_template: "{{ trigger.from_state.state == 'Away' }}"
           - condition: template
-            value_template: "{{ states('scene.heating_restore_' ~ heating_entities) != 'unavailable' }}"
+            value_template: "{{ states('scene.heating_restore_' ~ (heating_entities | replace('.', '_'))) != 'unavailable' }}"
         sequence:
           - service: scene.turn_on
             target:
-              entity_id: "scene.heating_restore_{{ heating_entities }}"
+              entity_id: "scene.heating_restore_{{ heating_entities | replace('.', '_') }}"
     # --- STANDARD-LOGIK (WIRD AUSGEFÜHRT, WENN KEINE DER OBIGEN BEDINGUNGEN ZUTRIFFT) ---
     default:
       - if:
