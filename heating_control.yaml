@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V2.8)
+  name: Heizungssteuerung (V2.9)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -82,6 +82,9 @@ variables:
   schedule_entity: !input schedule_entity
   scheduler_enabled: !input scheduler_enabled
 
+  # Szenename (individuell pro Thermostat)
+  scene_id: "heating_restore_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
+
   # Logik-Variablen
   is_heating_season: "{{ heating_on_off is not none and states(heating_on_off) == 'on' or heating_on_off is none }}"
   is_scheduler_active: "{{ scheduler_enabled and schedule_entity is not none and states(schedule_entity) == 'on' }}"
@@ -129,7 +132,7 @@ action:
         sequence:
           - service: scene.create
             data:
-              scene_id: heating_restore_state
+              scene_id: "heating_restore_{{ heating_entities }}"
               snapshot_entities: "{{ heating_entities }}"
           - service: climate.set_temperature
             target:
@@ -199,11 +202,11 @@ action:
           - condition: template
             value_template: "{{ trigger.from_state.state == 'Away' }}"
           - condition: template
-            value_template: "{{ states('scene.heating_restore_state') != 'unavailable' }}"
+            value_template: "{{ states('scene.heating_restore_' ~ heating_entities) != 'unavailable' }}"
         sequence:
           - service: scene.turn_on
             target:
-              entity_id: scene.heating_restore_state
+              entity_id: "scene.heating_restore_{{ heating_entities }}"
     # --- STANDARD-LOGIK (WIRD AUSGEFÜHRT, WENN KEINE DER OBIGEN BEDINGUNGEN ZUTRIFFT) ---
     default:
       - if:
