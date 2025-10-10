@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V2.95)
+  name: Heizungssteuerung (V2.93)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -86,7 +86,7 @@ variables:
   scene_id: "heating_restore_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
 
   # Logik-Variablen
-  is_heating_season: "{{ heating_on_off is none or states(heating_on_off) == 'on' }}"
+  is_heating_season: "{{ heating_on_off is not none and states(heating_on_off) == 'on' or heating_on_off is none }}"
   heating_on_off_entity: "{{ heating_on_off if heating_on_off is not none else '' }}"
   schedule_entity_id: "{{ schedule_entity if schedule_entity is not none else '' }}"
   is_scheduler_active: "{{ scheduler_enabled and schedule_entity is not none and states(schedule_entity) == 'on' }}"
@@ -97,13 +97,10 @@ trigger:
   - platform: state
     entity_id: !input flat_occupation_state
     id: "occupation_change"
-  - platform: event
-    event_type: "fake_event"
+  - platform: state
+    entity_id: !input heating_on_off
     id: "heating_toggle"
-    enabled: false
-    platform_type: state
-    variables:
-      entity_id: !input heating_on_off
+    enabled: "{{ heating_on_off is not none }}"
   - platform: state
     entity_id: !input schedule_entity
     id: "schedule_change"
