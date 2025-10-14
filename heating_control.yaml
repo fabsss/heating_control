@@ -88,7 +88,6 @@ variables:
   # Logik-Variablen
   is_heating_season: "{{ heating_on_off is not none and states(heating_on_off) == 'on' or heating_on_off is none }}"
   heating_on_off_entity: "{{ heating_on_off if heating_on_off is not none else '' }}"
-  schedule_entity_id: "{{ schedule_entity if schedule_entity is not none else '' }}"
   is_scheduler_active: "{{ scheduler_enabled and schedule_entity is not none and states(schedule_entity) == 'on' }}"
   was_home_before: "{{ trigger.from_state.state in ['Home', 'Leaving'] }}"
 
