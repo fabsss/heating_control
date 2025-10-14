@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V2.96)
+  name: Heizungssteuerung (V2.97)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -31,7 +31,7 @@ blueprint:
       default: 18.0
       selector:
         number:
-          min: 10
+          min: 5
           max: 25
           unit_of_measurement: "°C"
           step: 0.5
@@ -102,7 +102,7 @@ trigger:
     id: "heating_toggle"
     enabled: "{{ heating_on_off is not none }}"
   - platform: state
-    entity_id: !input schedule_entity
+    entity_id: "{{ schedule_entity if schedule_entity is not none else 'input_text.dummy_entity' }}"
     id: "schedule_change"
     enabled: "{{ schedule_entity is not none }}"
   - platform: time
