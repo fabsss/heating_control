@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V2.10)
+  name: Heizungssteuerung (V3.0)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -101,10 +101,10 @@ trigger:
     entity_id: !input heating_on_off
     id: "heating_toggle"
     enabled: "{{ heating_on_off is not none }}"
-  # - platform: state
-  #   entity_id: !input schedule_entity
-  #   id: "schedule_change"
-  #   enabled: false # Wird über input_boolean gesteuert
+  - platform: state
+    enabled: false
+    entity_id: !input schedule_entity
+    id: "schedule_change"
   - platform: time
     at: !input daily_eco_time
     id: "nightly_eco_time"
