@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V2.95)
+  name: Heizungssteuerung (V2.96)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -192,7 +192,7 @@ action:
 
 
               
-      # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT (NUR NACH AWAY) ---
+      # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT (NUR NACH AWAY UND WENN SCHEDULER NICHT AKTIV) ---
       - conditions:
           - condition: trigger
             id: "occupation_change"
@@ -203,6 +203,8 @@ action:
               - "Home"
           - condition: template
             value_template: "{{ trigger.from_state.state == 'Away' }}"
+          - condition: template
+            value_template: "{{ not is_scheduler_active }}"
           - condition: template
             value_template: "{{ states('scene.heating_restore_' ~ (heating_entities | replace('.', '_'))) != 'unavailable' }}"
         sequence:
@@ -216,7 +218,7 @@ action:
           - condition: and
             conditions:
               - condition: template
-                value_template: "{{ is_scheduler_active and is_state(flat_occupation_state, 'Home') and scheduler_enabled }}"
+                value_template: "{{ is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
               - condition: or
                 conditions:
                   - condition: trigger
@@ -241,7 +243,7 @@ action:
               - condition: trigger
                 id: "schedule_change"
               - condition: template
-                value_template: "{{ not is_scheduler_active and is_state(flat_occupation_state, 'Home') and scheduler_enabled }}"
+                value_template: "{{ not is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
         then:
           - service: climate.set_temperature
             target:
