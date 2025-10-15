@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.01)
+  name: Heizungssteuerung (V3.02)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -20,7 +20,7 @@ blueprint:
     heating_on_off:
       name: (Optional) Heizung An/Aus (Winter-Modus)
       description: Optional - Input Boolean, der die Heizungssteuerung global aktiviert oder deaktiviert. Wenn nicht gesetzt, ist die Heizung immer aktiv.
-      default: null
+      default: []
       selector:
         entity:
           domain: input_boolean
@@ -60,11 +60,11 @@ blueprint:
       selector:
         entity:
           domain: schedule
-          multiple: true
+          multiple: false
           
     # Optionaler täglicher Reset
     daily_eco_time:
-      name: (Optional) Zeit für nächtliche Eco-Umschaltung
+      name: Zeit für nächtliche Eco-Umschaltung
       description: Die Uhrzeit, zu der die Heizung im "Guest Mode" auf Eco gesetzt wird.
       default: "01:00:00"
       selector:
@@ -167,32 +167,39 @@ action:
             data:
               hvac_mode: heat
               
-      # --- NÄCHTLICHE ECO-UMSCHALTUNG IM GASTMODUS UND HOME ---
+      # --- NÄCHTLICHE ECO-UMSCHALTUNG UND RESET DER MANUELLEN EINGRIFFE ---
       - conditions:
           - condition: trigger
             id: "nightly_eco_time"
-          - condition: state
-            entity_id: !input flat_occupation_state
-            state: 
-              - "Guest Mode"
-              - "Home"
-          - condition: template
-            value_template: "{{ state_attr(heating_entities, 'hvac_action') != 'off' }}"
         sequence:
-          - service: climate.set_temperature
-            target:
-              entity_id: !input heating_entities
+          # Szene löschen (Reset der manuellen Eingriffe)
+          - service: scene.delete
             data:
-              temperature: !input eco_temperature
-          - service: climate.set_hvac_mode
-            target:
-              entity_id: !input heating_entities
-            data:
-              hvac_mode: heat
+              entity_id: "scene.heating_restore_{{ heating_entities | replace('.', '_') }}"
+          # Nur wenn im Home/Guest Mode, dann Eco setzen
+          - if:
+              - condition: state
+                entity_id: !input flat_occupation_state
+                state: 
+                  - "Guest Mode"
+                  - "Home"
+              - condition: template
+                value_template: "{{ state_attr(heating_entities, 'hvac_action') != 'off' }}"
+            then:
+              - service: climate.set_temperature
+                target:
+                  entity_id: !input heating_entities
+                data:
+                  temperature: !input eco_temperature
+              - service: climate.set_hvac_mode
+                target:
+                  entity_id: !input heating_entities
+                data:
+                  hvac_mode: heat
 
 
               
-      # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT (NUR NACH AWAY UND WENN SCHEDULER NICHT AKTIV) ---
+      # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT (NUR NACH AWAY UND WENN SZENE EXISTIERT) ---
       - conditions:
           - condition: trigger
             id: "occupation_change"
@@ -203,8 +210,6 @@ action:
               - "Home"
           - condition: template
             value_template: "{{ trigger.from_state.state == 'Away' }}"
-          - condition: template
-            value_template: "{{ not is_scheduler_active }}"
           - condition: template
             value_template: "{{ states('scene.heating_restore_' ~ (heating_entities | replace('.', '_'))) != 'unavailable' }}"
         sequence:
