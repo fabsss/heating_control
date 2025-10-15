@@ -20,7 +20,7 @@ blueprint:
     heating_on_off:
       name: (Optional) Heizung An/Aus (Winter-Modus)
       description: Optional - Input Boolean, der die Heizungssteuerung global aktiviert oder deaktiviert. Wenn nicht gesetzt, ist die Heizung immer aktiv.
-      default: []
+      default: true
       selector:
         entity:
           domain: input_boolean
