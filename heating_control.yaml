@@ -20,7 +20,7 @@ blueprint:
     heating_on_off:
       name: (Optional) Heizung An/Aus (Winter-Modus)
       description: Optional - Input Boolean, der die Heizungssteuerung global aktiviert oder deaktiviert. Wenn nicht gesetzt, ist die Heizung immer aktiv.
-      default: true
+      default: []
       selector:
         entity:
           domain: input_boolean
@@ -87,8 +87,7 @@ variables:
   scene_id: "heating_restore_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
 
   # Logik-Variablen
-  is_heating_season: "{{ heating_on_off is not none and states(heating_on_off) == 'on' or heating_on_off is none }}"
-  heating_on_off_entity: "{{ heating_on_off if heating_on_off is not none else '' }}"
+  is_heating_season: "{{ heating_on_off != [] and states(heating_on_off) == 'on' or heating_on_off == [] }}"
   is_scheduler_active: "{{ scheduler_enabled and schedule_entity is not none and states(schedule_entity) == 'on' }}"
   was_home_before: "{{ trigger.from_state.state in ['Home', 'Leaving'] }}"
 
@@ -100,7 +99,7 @@ trigger:
   - platform: state
     entity_id: !input heating_on_off
     id: "heating_toggle"
-    enabled: "{{ heating_on_off is not none }}"
+    enabled: "{{ heating_on_off != [] }}"
   - platform: state
     enabled: scheduler_enabled
     entity_id: !input schedule_entity
