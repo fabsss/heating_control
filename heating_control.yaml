@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.04)
+  name: Heizungssteuerung (V3.05)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -81,14 +81,14 @@ variables:
   heating_on_off: !input heating_on_off
   scheduler_enabled: !input scheduler_enabled
   # Sicherer Zugriff auf optionale Schedule-Entity
-  schedule_entity: "{{ schedule_entity if schedule_entity is not none else '' }}"
+  schedule_entity: "{{ schedule_entity if schedule_entity != [] else '' }}"
 
   # Szenename (individuell pro Thermostat)
   scene_id: "heating_restore_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
 
   # Logik-Variablen
   is_heating_season: "{{ heating_on_off != [] and states(heating_on_off) == 'on' or heating_on_off == [] }}"
-  is_scheduler_active: "{{ scheduler_enabled and schedule_entity is not none and states(schedule_entity) == 'on' }}"
+  is_scheduler_active: "{{ scheduler_enabled and schedule_entity != [] and states(schedule_entity) == 'on' }}"
   was_home_before: "{{ trigger.from_state.state in ['Home', 'Leaving'] }}"
 
 # Trigger: Löst bei jeder relevanten Änderung aus
