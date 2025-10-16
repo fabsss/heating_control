@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.05)
+  name: Heizungssteuerung (V3.06)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -28,7 +28,7 @@ blueprint:
     eco_temperature:
       name: Eco-Temperatur
       description: Die Temperatur in °C für die Modi "Away", "Sleep" und nach der Nacht-Umschaltungszeit
-      default: 18.0
+      default: 17.0
       selector:
         number:
           min: 5
@@ -101,15 +101,25 @@ trigger:
     id: "heating_toggle"
     enabled: "{{ heating_on_off != [] }}"
   - platform: state
-    enabled: scheduler_enabled
+    enabled: !input scheduler_enabled
     entity_id: !input schedule_entity
     id: "schedule_change"
   - platform: time
     at: !input daily_eco_time
     id: "nightly_eco_time"
+  - platform: state
+    entity_id: scheduler_enabled
+    id: "scheduler_enabled_change"
 
 action:
   - choose:
+      # --- NEU: AUTOMATION RELOAD BEI SCHEDULER_ENABLED TOGGLE ---
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'scheduler_enabled_change' }}"
+        sequence:
+          - service: automation.reload
+            data: {}
       # --- HÖCHSTE PRIORITÄT: HEIZUNG AUS ---
       - conditions:
           - condition: template
@@ -135,16 +145,16 @@ action:
             data:
               scene_id: "heating_restore_{{ heating_entities | replace('.', '_') }}"
               snapshot_entities: "{{ heating_entities }}"
-          - service: climate.set_temperature
-            target:
-              entity_id: !input heating_entities
-            data:
-              temperature: !input eco_temperature
+          # - service: climate.set_temperature
+          #   target:
+          #     entity_id: !input heating_entities
+          #   data:
+          #     temperature: !input eco_temperature
           - service: climate.set_hvac_mode
             target:
               entity_id: !input heating_entities
             data:
-              hvac_mode: heat
+              hvac_mode: off # war: heat - Schaltet Heizung aus, wenn weg
 
       # --- DRITTE PRIORITÄT: ECO BEI SLEEP ---
       - conditions:
@@ -268,6 +278,6 @@ action:
         then:
           - service: automation.trigger
             target:
-              entity_id: "{{ automation_id }}"
+              entity_id: "{{ this.entity_id }}"
             data:
               skip_condition: true
