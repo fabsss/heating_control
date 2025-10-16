@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.12)
+  name: Heizungssteuerung (V3.13)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -67,7 +67,7 @@ blueprint:
       default: []
       selector:
         entity:
-          domain: input_boolean
+          domain: binary_sensor
           multiple: false
           
     # Optionaler täglicher Reset
