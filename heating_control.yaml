@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.13)
+  name: Heizungssteuerung (V3.14)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -63,7 +63,7 @@ blueprint:
           multiple: false
     office_day_eco_override:
       name: (Optional) Office-Modus (Scheduler deaktiviert)
-      description: Optional - Input Boolean, welche aktiv ist wenn an einem Arbeitstag im Büro gearbeitet wird. In diesem Fall wird der Scheduler ignoriert.
+      description: Optional - Binary Sensor, welche aktiv ist wenn an einem Arbeitstag im Büro gearbeitet wird. In diesem Fall wird der Scheduler ignoriert.
       default: []
       selector:
         entity:
@@ -154,7 +154,7 @@ action:
             target:
               entity_id: !input heating_entities
             data:
-              hvac_mode: off # war: heat - Schaltet Heizung aus, wenn weg
+              hvac_mode: "off" # war: heat - Schaltet Heizung aus, wenn weg
 
       # --- DRITTE PRIORITÄT: ECO BEI SLEEP ---
       - conditions:
