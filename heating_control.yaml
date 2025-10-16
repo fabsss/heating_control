@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.11)
+  name: Heizungssteuerung (V3.12)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -62,8 +62,8 @@ blueprint:
           domain: schedule
           multiple: false
     office_day_eco_override:
-      name: (Optional) Office-Modus (Heizung immer Eco)
-      description: Optional - Input Boolean, welche aktiv ist wenn an einem Arbeitstag im Home-Office gearbeitet wird. In diesem Fall wird der Scheduler ignoriert.
+      name: (Optional) Office-Modus (Scheduler deaktiviert)
+      description: Optional - Input Boolean, welche aktiv ist wenn an einem Arbeitstag im Büro gearbeitet wird. In diesem Fall wird der Scheduler ignoriert.
       default: []
       selector:
         entity:
@@ -90,14 +90,14 @@ variables:
   scheduler_enabled: !input scheduler_enabled
   office_day_eco_override: !input office_day_eco_override
   # Sicherer Zugriff auf optionale Schedule-Entity
-  schedule_entity: "{{ schedule_entity if schedule_entity != [] else '' }}"
+  schedule_entity: !input schedule_entity
 
   # Szenename (individuell pro Thermostat)
   scene_id: "heating_restore_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
 
   # Logik-Variablen
   is_heating_season: "{{ (heating_on_off != [] and states(heating_on_off) == 'on') or heating_on_off == [] }}"
-  is_scheduler_active: "{{ schedule_entity != [] and states(schedule_entity) == 'on' }}" # Scheduler in "on"-Zustand
+  is_scheduler_active: "{{ states(schedule_entity) == 'on' }}" # Scheduler in "on"-Zustand
   is_scheduler_enabled: "{{ (office_day_eco_override !=[] and states(office_day_eco_override) == 'off' and scheduler_enabled) or (office_day_eco_override ==[] and scheduler_enabled) }}" # Scheduler ist aktiv und kein Office-Tag
   was_home_before: "{{ trigger.from_state.state in ['Home', 'Leaving'] }}"
 
