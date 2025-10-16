@@ -163,10 +163,17 @@ action:
                   snapshot_entities: "{{ heating_entities }}"
             # Lösche Szene, wenn keine manuellen Änderungen vorliegen
             else:
-              - service: scene.delete
-                data: {}
-                target:
-                  entity_id: "scene.{{ restore_scene }}"
+              # Szene löschen (Reset der manuellen Eingriffe) wenn sie existiert
+              - if:
+                  - condition: template
+                    value_template: >
+                      {% set scene = 'scene.' ~ restore_scene %}
+                      {{ state_attr(scene, 'entity_id') is not none }}
+                then:
+                  - service: scene.delete
+                    data: {}
+                    target:
+                      entity_id: "scene.{{ restore_scene }}"
           # - service: climate.set_temperature
           #   target:
           #     entity_id: !input heating_entities
@@ -214,11 +221,17 @@ action:
           - condition: trigger
             id: "nightly_eco_time"
         sequence:
-          # Szene löschen (Reset der manuellen Eingriffe)
-          - service: scene.delete
-            data: {}
-            target:
-              entity_id: "scene.{{ restore_scene }}"
+          # Szene löschen (Reset der manuellen Eingriffe) wenn sie existiert
+          - if:
+              - condition: template
+                value_template: >
+                  {% set scene = 'scene.' ~ restore_scene %}
+                  {{ state_attr(scene, 'entity_id') is not none }}
+            then:
+              - service: scene.delete
+                data: {}
+                target:
+                  entity_id: "scene.{{ restore_scene }}"
           # Nur wenn im Home/Guest Mode, dann Eco setzen
           - if:
               - condition: state
