@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.08)
+  name: Heizungssteuerung (V3.09)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -228,6 +228,12 @@ action:
                     id: "schedule_change"
                   - condition: trigger
                     id: "occupation_change"
+                  - condition: and
+                    conditions:
+                      - condition: trigger
+                        id: "heating_toggle"
+                      - condition: template
+                        value_template: "{{ is_heating_season }}"
         then:
           - service: climate.set_temperature
             target:
@@ -243,8 +249,16 @@ action:
       - if:
           - condition: and
             conditions:
-              - condition: trigger
-                id: "schedule_change"
+              - condition: or
+                conditions:
+                - condition: trigger
+                  id: "schedule_change"
+                - condition: and
+                  conditions:
+                    - condition: trigger
+                      id: "heating_toggle"
+                    - condition: template
+                      value_template: "{{ is_heating_season }}"
               - condition: template
                 value_template: "{{ not is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
         then:
@@ -268,5 +282,4 @@ action:
           - service: automation.trigger
             target:
               entity_id: "{{ this.entity_id }}"
-            data:
-              skip_condition: true
+            data: {}
