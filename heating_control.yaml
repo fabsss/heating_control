@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.07)
+  name: Heizungssteuerung (V3.08)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -107,19 +107,8 @@ trigger:
   - platform: time
     at: !input daily_eco_time
     id: "nightly_eco_time"
-  - platform: state
-    entity_id: !input scheduler_enabled
-    id: "scheduler_enabled_change"
-
 action:
   - choose:
-      # --- NEU: AUTOMATION RELOAD BEI SCHEDULER_ENABLED TOGGLE ---
-      - conditions:
-          - condition: template
-            value_template: "{{ trigger.id == 'scheduler_enabled_change' }}"
-        sequence:
-          - service: automation.reload
-            data: {}
       # --- HÖCHSTE PRIORITÄT: HEIZUNG AUS ---
       - conditions:
           - condition: template
