@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.10)
+  name: Heizungssteuerung (V3.11)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -61,6 +61,14 @@ blueprint:
         entity:
           domain: schedule
           multiple: false
+    office_day_eco_override:
+      name: (Optional) Office-Modus (Heizung immer Eco)
+      description: Optional - Input Boolean, welche aktiv ist wenn an einem Arbeitstag im Home-Office gearbeitet wird. In diesem Fall wird der Scheduler ignoriert.
+      default: []
+      selector:
+        entity:
+          domain: input_boolean
+          multiple: false
           
     # Optionaler täglicher Reset
     daily_eco_time:
@@ -80,6 +88,7 @@ variables:
   flat_occupation_state: !input flat_occupation_state
   heating_on_off: !input heating_on_off
   scheduler_enabled: !input scheduler_enabled
+  office_day_eco_override: !input office_day_eco_override
   # Sicherer Zugriff auf optionale Schedule-Entity
   schedule_entity: "{{ schedule_entity if schedule_entity != [] else '' }}"
 
@@ -89,7 +98,9 @@ variables:
   # Logik-Variablen
   is_heating_season: "{{ (heating_on_off != [] and states(heating_on_off) == 'on') or heating_on_off == [] }}"
   is_scheduler_active: "{{ schedule_entity != [] and states(schedule_entity) == 'on' }}" # Scheduler in "on"-Zustand
+  is_scheduler_enabled: "{{ (office_day_eco_override !=[] and states(office_day_eco_override) == 'off' and scheduler_enabled) or (office_day_eco_override ==[] and scheduler_enabled) }}" # Scheduler ist aktiv und kein Office-Tag
   was_home_before: "{{ trigger.from_state.state in ['Home', 'Leaving'] }}"
+
 
 # Trigger: Löst bei jeder relevanten Änderung aus
 trigger:
@@ -221,7 +232,7 @@ action:
           - condition: and
             conditions:
               - condition: template
-                value_template: "{{ scheduler_enabled and is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
+                value_template: "{{ is_scheduler_enabled and is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
               - condition: or
                 conditions:
                   - condition: trigger
@@ -260,7 +271,7 @@ action:
                     - condition: template
                       value_template: "{{ is_heating_season }}"
               - condition: template
-                value_template: "{{ scheduler_enabled and not is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
+                value_template: "{{ is_scheduler_enabled and not is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
         then:
           - service: climate.set_temperature
             target:
