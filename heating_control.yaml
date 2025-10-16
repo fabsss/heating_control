@@ -1,6 +1,6 @@
 blueprint:
-  name: Heizungssteuerung (V3.17)
-  description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
+  name: Heizungssteuerung (V3.18)
+  description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
   input:
@@ -89,11 +89,9 @@ variables:
   heating_on_off: !input heating_on_off
   scheduler_enabled: !input scheduler_enabled
   office_day_eco_override: !input office_day_eco_override
-  # Sicherer Zugriff auf optionale Schedule-Entity
   schedule_entity: !input schedule_entity
 
-  # Szenename (individuell pro Thermostat)
-  scene_id: "heating_restore_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
+  # Keine scene_id Variable mehr nötig, wird durch restore_scene ersetzt
 
   # Logik-Variablen
   is_heating_season: "{{ (heating_on_off != [] and states(heating_on_off) == 'on') or heating_on_off == [] }}"
@@ -101,9 +99,9 @@ variables:
   is_scheduler_enabled: "{{ (office_day_eco_override !=[] and states(office_day_eco_override) == 'off' and scheduler_enabled) or (office_day_eco_override ==[] and scheduler_enabled) }}" # Scheduler ist aktiv und kein Office-Tag
   was_home_before: "{{ trigger.from_state.state in ['Home', 'Leaving'] }}"
   
-  # Referenzwerte für Temperatur und HVAC Mode (initial auf eco)
-  hvac_mode_reference: "heat"
-  temp_reference: !input eco_temperature
+  # Szenennamen für Referenz- und Restore-Zustände
+  reference_scene: "heating_reference_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
+  restore_scene: "heating_restore_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
 
 
 # Trigger: Löst bei jeder relevanten Änderung aus
@@ -149,20 +147,25 @@ action:
           - if:
               - condition: template
                 value_template: >
-                  {{ 
-                    state_attr(heating_entities, 'temperature') != temp_reference or 
-                    state_attr(heating_entities, 'hvac_mode') != hvac_mode_reference 
-                  }}
+                  {% if states(reference_scene) == 'unavailable' %}
+                    false
+                  {% else %}
+                    {% set current_temp = state_attr(heating_entities, 'temperature') %}
+                    {% set current_mode = state_attr(heating_entities, 'hvac_mode') %}
+                    {% set ref_temp = state_attr(reference_scene, 'attributes', {}).temperature %}
+                    {% set ref_mode = state_attr(reference_scene, 'attributes', {}).hvac_mode %}
+                    {{ current_temp != ref_temp or current_mode != ref_mode }}
+                  {% endif %}
             then:
               - service: scene.create
                 data:
-                  scene_id: "heating_restore_{{ heating_entities | replace('.', '_') }}"
+                  scene_id: "{{ restore_scene }}"
                   snapshot_entities: "{{ heating_entities }}"
             # Lösche Szene, wenn keine manuellen Änderungen vorliegen
             else:
               - service: scene.delete
                 data:
-                  entity_id: "scene.heating_restore_{{ heating_entities | replace('.', '_') }}"
+                  entity_id: "scene.{{ restore_scene }}"
           # - service: climate.set_temperature
           #   target:
           #     entity_id: !input heating_entities
@@ -194,10 +197,16 @@ action:
               entity_id: !input heating_entities
             data:
               hvac_mode: heat
-          # Referenzwerte aktualisieren
-          - variables:
-              temp_reference: !input eco_temperature
-              hvac_mode_reference: "heat"
+          - delay:
+              hours: 0
+              minutes: 0
+              seconds: 5
+              milliseconds: 0
+          # Referenz-Szene aktualisieren
+          - service: scene.create
+            data:
+              scene_id: "{{ reference_scene }}"
+              snapshot_entities: "{{ heating_entities }}"
               
       # --- NÄCHTLICHE ECO-UMSCHALTUNG UND RESET DER MANUELLEN EINGRIFFE ---
       - conditions:
@@ -228,12 +237,16 @@ action:
                   entity_id: !input heating_entities
                 data:
                   hvac_mode: heat
-              # Referenzwerte aktualisieren
-              - variables:
-                  temp_reference: !input eco_temperature
-                  hvac_mode_reference: "heat"
-
-
+              - delay:
+                  hours: 0
+                  minutes: 0
+                  seconds: 5
+                  milliseconds: 0
+              # Referenz-Szene aktualisieren
+              - service: scene.create
+                data:
+                  scene_id: "{{ reference_scene }}"
+                  snapshot_entities: "{{ heating_entities }}"
               
       # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT (NUR NACH AWAY UND WENN SZENE EXISTIERT) ---
       - conditions:
@@ -283,10 +296,16 @@ action:
               entity_id: !input heating_entities
             data:
               hvac_mode: heat
-          # Referenzwerte aktualisieren
-          - variables:
-              temp_reference: !input comfort_temperature
-              hvac_mode_reference: "heat"
+          - delay:
+              hours: 0
+              minutes: 0
+              seconds: 5
+              milliseconds: 0
+          # Referenz-Szene aktualisieren
+          - service: scene.create
+            data:
+              scene_id: "{{ reference_scene }}"
+              snapshot_entities: "{{ heating_entities }}"
       # Bedingung 2: Scheduler wurde deaktiviert UND Anwesenheitsstatus ist weiterhin "Home"
       - if:
           - condition: and
@@ -314,7 +333,13 @@ action:
               entity_id: !input heating_entities
             data:
               hvac_mode: heat
-          # Referenzwerte aktualisieren
-          - variables:
-              temp_reference: !input eco_temperature
-              hvac_mode_reference: "heat"
+          - delay:
+              hours: 0
+              minutes: 0
+              seconds: 5
+              milliseconds: 0
+          # Referenz-Szene aktualisieren
+          - service: scene.create
+            data:
+              scene_id: "{{ reference_scene }}"
+              snapshot_entities: "{{ heating_entities }}"
