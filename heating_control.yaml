@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.19)
+  name: Heizungssteuerung (V3.20)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -261,8 +261,11 @@ action:
               - "Home"
           - condition: template
             value_template: "{{ trigger.from_state.state == 'Away' }}"
+          # Prüft ob die Restore-Szene wirklich existiert (state attributes sind nur bei existierenden Szenen vorhanden)
           - condition: template
-            value_template: "{{ states('scene.heating_restore_' ~ (heating_entities | replace('.', '_'))) != 'unavailable' }}"
+            value_template: >
+              {% set scene = 'scene.' ~ restore_scene %}
+              {{ state_attr(scene, 'entity_id') is not none }}
         sequence:
           - service: scene.turn_on
             target:
