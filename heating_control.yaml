@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.16)
+  name: Heizungssteuerung (V3.17)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -104,13 +104,6 @@ variables:
   # Referenzwerte für Temperatur und HVAC Mode (initial auf eco)
   hvac_mode_reference: "heat"
   temp_reference: !input eco_temperature
-  
-  # Prüft ob aktueller Zustand vom letzten automatischen abweicht
-  has_manual_changes: >
-    {{ 
-      state_attr(heating_entities, 'temperature') != temp_reference or 
-      state_attr(heating_entities, 'hvac_mode') != hvac_mode_reference 
-    }}
 
 
 # Trigger: Löst bei jeder relevanten Änderung aus
@@ -155,7 +148,11 @@ action:
           # Szene nur speichern wenn manuelle Änderungen vorliegen
           - if:
               - condition: template
-                value_template: "{{ has_manual_changes }}"
+                value_template: >
+                  {{ 
+                    state_attr(heating_entities, 'temperature') != temp_reference or 
+                    state_attr(heating_entities, 'hvac_mode') != hvac_mode_reference 
+                  }}
             then:
               - service: scene.create
                 data:
