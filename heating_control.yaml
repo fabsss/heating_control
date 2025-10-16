@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.09)
+  name: Heizungssteuerung (V3.10)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus..
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -87,8 +87,8 @@ variables:
   scene_id: "heating_restore_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
 
   # Logik-Variablen
-  is_heating_season: "{{ heating_on_off != [] and states(heating_on_off) == 'on' or heating_on_off == [] }}"
-  is_scheduler_active: "{{ scheduler_enabled and schedule_entity != [] and states(schedule_entity) == 'on' }}"
+  is_heating_season: "{{ (heating_on_off != [] and states(heating_on_off) == 'on') or heating_on_off == [] }}"
+  is_scheduler_active: "{{ schedule_entity != [] and states(schedule_entity) == 'on' }}" # Scheduler in "on"-Zustand
   was_home_before: "{{ trigger.from_state.state in ['Home', 'Leaving'] }}"
 
 # Trigger: Löst bei jeder relevanten Änderung aus
@@ -221,7 +221,7 @@ action:
           - condition: and
             conditions:
               - condition: template
-                value_template: "{{ is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
+                value_template: "{{ scheduler_enabled and is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
               - condition: or
                 conditions:
                   - condition: trigger
@@ -260,7 +260,7 @@ action:
                     - condition: template
                       value_template: "{{ is_heating_season }}"
               - condition: template
-                value_template: "{{ not is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
+                value_template: "{{ scheduler_enabled and not is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
         then:
           - service: climate.set_temperature
             target:
@@ -272,14 +272,3 @@ action:
               entity_id: !input heating_entities
             data:
               hvac_mode: heat
-      - if:
-          # Bedingung: Der Winter-Modus wurde gerade eingeschaltet.
-          - condition: trigger
-            id: "heating_toggle"
-          - condition: template
-            value_template: "{{ is_heating_season }}"
-        then:
-          - service: automation.trigger
-            target:
-              entity_id: "{{ this.entity_id }}"
-            data: {}
