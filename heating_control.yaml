@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.18)
+  name: Heizungssteuerung (V3.19)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -164,7 +164,8 @@ action:
             # Lösche Szene, wenn keine manuellen Änderungen vorliegen
             else:
               - service: scene.delete
-                data:
+                data: {}
+                target:
                   entity_id: "scene.{{ restore_scene }}"
           # - service: climate.set_temperature
           #   target:
@@ -215,8 +216,9 @@ action:
         sequence:
           # Szene löschen (Reset der manuellen Eingriffe)
           - service: scene.delete
-            data:
-              entity_id: "scene.heating_restore_{{ heating_entities | replace('.', '_') }}"
+            data: {}
+            target:
+              entity_id: "scene.{{ restore_scene }}"
           # Nur wenn im Home/Guest Mode, dann Eco setzen
           - if:
               - condition: state
