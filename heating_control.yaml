@@ -282,7 +282,7 @@ action:
         sequence:
           - service: scene.turn_on
             target:
-              entity_id: "scene.heating_restore_{{ heating_entities | replace('.', '_') }}"
+              entity_id: "scene.{{ restore_scene }}"
     # --- STANDARD-LOGIK (WIRD AUSGEFÜHRT, WENN KEINE DER OBIGEN BEDINGUNGEN ZUTRIFFT) ---
     default:
       - if:
