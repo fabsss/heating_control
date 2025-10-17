@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V3.25)
+  name: Heizungssteuerung (V4.00)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -53,6 +53,14 @@ blueprint:
       default: false
       selector:
         boolean: {}
+    scheduler_toggle:
+      name: (Optional) Scheduler Ein/Aus Toggle
+      description: Optional - Input Boolean zur Laufzeit-Steuerung des Schedulers. Hat Vorrang vor "scheduler_enabled".
+      default: []
+      selector:
+        entity:
+          domain: input_boolean
+          multiple: false
     schedule_entity:
       name: (Optional) Zeitplan
       description: Schedule-Helper für die Komforttemperatur-Zeiten. Wird nur benötigt, wenn der Scheduler aktiviert ist.
@@ -88,6 +96,7 @@ variables:
   flat_occupation_state: !input flat_occupation_state
   heating_on_off: !input heating_on_off
   scheduler_enabled: !input scheduler_enabled
+  scheduler_toggle: !input scheduler_toggle
   office_day_eco_override: !input office_day_eco_override
   schedule_entity: !input schedule_entity
 
@@ -96,13 +105,17 @@ variables:
   # Logik-Variablen
   is_heating_season: "{{ (heating_on_off != [] and states(heating_on_off) == 'on') or heating_on_off == [] }}"
   is_scheduler_active: "{{ states(schedule_entity) == 'on' }}" # Scheduler in "on"-Zustand
-  is_scheduler_enabled: "{{ (office_day_eco_override !=[] and states(office_day_eco_override) == 'off' and scheduler_enabled) or (office_day_eco_override ==[] and scheduler_enabled) }}" # Scheduler ist aktiv und kein Office-Tag
+  # Scheduler-Logik: input_boolean hat Vorrang vor statischer scheduler_enabled Variable
+  is_scheduler_enabled: >
+    {{ 
+      (scheduler_toggle != [] and states(scheduler_toggle) == 'on') or 
+      (scheduler_toggle == [] and scheduler_enabled)
+    }} and 
+    {{ 
+      (office_day_eco_override == [] or states(office_day_eco_override) == 'off')
+    }}
   was_home_before: "{{ trigger is defined and trigger.from_state is defined and trigger.from_state.state in ['Home', 'Leaving'] }}"
 
-  
-  # Szenennamen für Referenz- und Restore-Zustände
-  reference_scene: "heating_reference_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
-  restore_scene: "heating_restore_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
 
 
 # Trigger: Löst bei jeder relevanten Änderung aus
@@ -118,6 +131,10 @@ trigger:
     enabled: !input scheduler_enabled
     entity_id: !input schedule_entity
     id: "schedule_change"
+  - platform: state
+    entity_id: !input scheduler_toggle
+    id: "scheduler_toggle_change"
+    enabled: "{{ scheduler_toggle != [] }}"
   - platform: time
     at: !input daily_eco_time
     id: "nightly_eco_time"
@@ -134,7 +151,7 @@ action:
             target:
               entity_id: !input heating_entities
 
-      # --- ZWEITE PRIORITÄT: ZUSTAND SPEICHERN UND ECO BEIM VERLASSEN ---
+      # --- ZWEITE PRIORITÄT: Heizung ausschalten beim Verlassen  ---
       - conditions:
           - condition: trigger
             id: "occupation_change"
@@ -145,43 +162,6 @@ action:
             state:
               - "Away"
         sequence:
-          # Szene nur speichern wenn manuelle Änderungen vorliegen
-          - if:
-              - condition: template
-                value_template: >
-                  {% if states('scene.' ~ reference_scene) == 'unavailable' %}
-                    false
-                  {% else %}
-                    {% set current_temp = state_attr(heating_entities, 'temperature') %}
-                    {% set current_mode = state_attr(heating_entities, 'hvac_mode') %}
-                    {% set ref_temp = state_attr('scene.' ~ reference_scene, 'temperature') %}
-                    {% set ref_mode = state_attr('scene.' ~ reference_scene, 'hvac_mode') %}
-                    {{ current_temp != ref_temp or current_mode != ref_mode }}
-                  {% endif %}
-            then:
-              - service: scene.create
-                data:
-                  scene_id: "{{ restore_scene }}"
-                  snapshot_entities: "{{ heating_entities }}"
-            # Lösche Szene, wenn keine manuellen Änderungen vorliegen
-            else:
-              # Szene löschen (Reset der manuellen Eingriffe) wenn sie existiert
-              - if:
-                  - condition: template
-                    value_template: >
-                      {% set scene = 'scene.' ~ restore_scene %}
-                      {{ state_attr(scene, 'entity_id') is not none }}
-                then:
-                  - service: scene.delete
-                    data: {}
-                    target:
-                      entity_id: "scene.{{ restore_scene }}"
-          # - service: climate.set_temperature
-          #   target:
-          #     entity_id: !input heating_entities
-          #   data:
-          #     temperature: !input eco_temperature
-
           - service: climate.set_hvac_mode
             target:
               entity_id: !input heating_entities
@@ -202,68 +182,28 @@ action:
               entity_id: !input heating_entities
             data:
               temperature: !input eco_temperature
-          - service: climate.set_hvac_mode
-            target:
-              entity_id: !input heating_entities
-            data:
-              hvac_mode: heat
-          - delay:
-              hours: 0
-              minutes: 0
-              seconds: 5
-              milliseconds: 0
-          # Referenz-Szene aktualisieren
-          - service: scene.create
-            data:
-              scene_id: "{{ reference_scene }}"
-              snapshot_entities: "{{ heating_entities }}"
               
       # --- NÄCHTLICHE ECO-UMSCHALTUNG UND RESET DER MANUELLEN EINGRIFFE ---
       - conditions:
           - condition: trigger
             id: "nightly_eco_time"
         sequence:
-          # Szene löschen (Reset der manuellen Eingriffe) wenn sie existiert
+          - service: climate.set_temperature
+            target:
+              entity_id: !input heating_entities
+            data:
+              temperature: !input eco_temperature
+          # Wiederherstellen des Heizmodus, wenn Anwesenheitsstatus "Home" ist (sonst passiert das beim nach Hause kommen)
           - if:
-              - condition: template
-                value_template: >
-                  {% set scene = 'scene.' ~ restore_scene %}
-                  {{ state_attr(scene, 'entity_id') is not none }}
+            - condition: state
+              entity_id: !input flat_occupation_state
+              state: "Home"
             then:
-              - service: scene.delete
-                data: {}
-                target:
-                  entity_id: "scene.{{ restore_scene }}"
-          # Nur wenn im Home/Guest Mode, dann Eco setzen
-          - if:
-              - condition: state
-                entity_id: !input flat_occupation_state
-                state: 
-                  - "Guest Mode"
-                  - "Home"
-              - condition: template
-                value_template: "{{ state_attr(heating_entities, 'hvac_action') != 'off' }}"
-            then:
-              - service: climate.set_temperature
-                target:
-                  entity_id: !input heating_entities
-                data:
-                  temperature: !input eco_temperature
               - service: climate.set_hvac_mode
                 target:
                   entity_id: !input heating_entities
                 data:
                   hvac_mode: heat
-              - delay:
-                  hours: 0
-                  minutes: 0
-                  seconds: 5
-                  milliseconds: 0
-              # Referenz-Szene aktualisieren
-              - service: scene.create
-                data:
-                  scene_id: "{{ reference_scene }}"
-                  snapshot_entities: "{{ heating_entities }}"
               
       # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT (NUR NACH AWAY UND WENN SZENE EXISTIERT) ---
       - conditions:
@@ -276,15 +216,13 @@ action:
               - "Home"
           - condition: template
             value_template: "{{ trigger.from_state.state == 'Away' }}"
-          # Prüft ob die Restore-Szene wirklich existiert (state attributes sind nur bei existierenden Szenen vorhanden)
-          - condition: template
-            value_template: >
-              {% set scene = 'scene.' ~ restore_scene %}
-              {{ state_attr(scene, 'entity_id') is not none }}
         sequence:
-          - service: scene.turn_on
+          - service: climate.set_hvac_mode
             target:
-              entity_id: "scene.{{ restore_scene }}"
+              entity_id: !input heating_entities
+            data:
+              hvac_mode: heat
+          
     # --- STANDARD-LOGIK (WIRD AUSGEFÜHRT, WENN KEINE DER OBIGEN BEDINGUNGEN ZUTRIFFT) ---
     default:
       - if:
@@ -292,13 +230,13 @@ action:
           - condition: and
             conditions:
               - condition: template
-                value_template: "{{ is_scheduler_enabled and is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
+                value_template: "{{ is_scheduler_enabled and is_scheduler_active }}"
               - condition: or
                 conditions:
                   - condition: trigger
                     id: "schedule_change"
                   - condition: trigger
-                    id: "occupation_change"
+                    id: "scheduler_toggle_change"
                   - condition: and
                     conditions:
                       - condition: trigger
@@ -311,21 +249,6 @@ action:
               entity_id: !input heating_entities
             data:
               temperature: !input comfort_temperature
-          - service: climate.set_hvac_mode
-            target:
-              entity_id: !input heating_entities
-            data:
-              hvac_mode: heat
-          - delay:
-              hours: 0
-              minutes: 0
-              seconds: 5
-              milliseconds: 0
-          # Referenz-Szene aktualisieren
-          - service: scene.create
-            data:
-              scene_id: "{{ reference_scene }}"
-              snapshot_entities: "{{ heating_entities }}"
       # Bedingung 2: Scheduler wurde deaktiviert UND Anwesenheitsstatus ist weiterhin "Home"
       - if:
           - condition: and
@@ -334,6 +257,8 @@ action:
                 conditions:
                 - condition: trigger
                   id: "schedule_change"
+                - condition: trigger
+                  id: "scheduler_toggle_change"
                 - condition: and
                   conditions:
                     - condition: trigger
@@ -341,25 +266,10 @@ action:
                     - condition: template
                       value_template: "{{ is_heating_season }}"
               - condition: template
-                value_template: "{{ is_scheduler_enabled and not is_scheduler_active and is_state(flat_occupation_state, 'Home') }}"
+                value_template: "{{ is_scheduler_enabled and not is_scheduler_active }}"
         then:
           - service: climate.set_temperature
             target:
               entity_id: !input heating_entities
             data:
               temperature: !input eco_temperature
-          - service: climate.set_hvac_mode
-            target:
-              entity_id: !input heating_entities
-            data:
-              hvac_mode: heat
-          - delay:
-              hours: 0
-              minutes: 0
-              seconds: 5
-              milliseconds: 0
-          # Referenz-Szene aktualisieren
-          - service: scene.create
-            data:
-              scene_id: "{{ reference_scene }}"
-              snapshot_entities: "{{ heating_entities }}"

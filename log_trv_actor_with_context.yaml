@@ -1,0 +1,121 @@
+blueprint:
+  name: TRV - Log actor with exact state_context_id (setpoint + hvac_mode) - multi-thermostat (V1.0)
+  description: >
+    Protokolliert Änderungen einer oder mehrerer Thermostate als Event "thermostat_actor_logged".
+    - Speichert nur User oder "unknown".
+    - Unterstützt mehrere Thermostate.
+    - Loggt Setpoint- und HVAC-Mode-Änderungen.
+    - Nutzt trigger.to_state.context.id zur exakten Verknüpfung mit states.context_id.
+  domain: automation
+  source_url: https://github.com/fabsss/heating_control/blob/main/log_trv_actor_with_context.yaml
+  input:
+    thermostats:
+      name: Thermostat entities
+      description: Wähle ein oder mehrere climate-Entities, die von dieser Automation überwacht werden sollen.
+      selector:
+        entity:
+          domain: climate
+          multiple: true
+    log_setpoint_changes:
+      name: Setpoint-Änderungen protokollieren
+      description: Wenn aktiv, wird geprüft (und geloggt), ob sich der Sollwert geändert hat.
+      default: true
+      selector:
+        boolean: {}
+    log_hvac_mode_changes:
+      name: HVAC-Mode-Änderungen protokollieren
+      description: Wenn aktiv, wird geprüft (und geloggt), ob sich der HVAC-Mode geändert hat.
+      default: true
+      selector:
+        boolean: {}
+    relevant_hvac_modes:
+      name: Relevante HVAC-Modi (CSV)
+      description: Kommaseparierte Liste relevanter HVAC-Modi (z. B. "heat, off"). Vergleich erfolgt case-insensitive.
+      default: "heat, off"
+      selector:
+        text: {}
+
+trigger:
+  - platform: state
+    entity_id: !input thermostats
+    for: "00:00:00"
+
+variables:
+  thermostats: !input thermostats
+  log_setpoint_changes: !input log_setpoint_changes
+  log_hvac_mode_changes: !input log_hvac_mode_changes
+  relevant_hvac_modes: !input relevant_hvac_modes
+
+mode: single
+
+action:
+  - variables:
+      ent: "{{ trigger.entity_id }}"
+      old_setpoint: >-
+        {{
+          (trigger.from_state.attributes.get('temperature') if trigger.from_state else none)
+          or (trigger.from_state.attributes.get('target_temperature') if trigger.from_state else none)
+          or (trigger.from_state.attributes.get('target_temp') if trigger.from_state else none)
+          or (trigger.from_state.attributes.get('setpoint') if trigger.from_state else none)
+        }}
+      new_setpoint: >-
+        {{
+          trigger.to_state.attributes.get('temperature')
+          or trigger.to_state.attributes.get('target_temperature')
+          or trigger.to_state.attributes.get('target_temp')
+          or trigger.to_state.attributes.get('setpoint')
+        }}
+      old_mode: >-
+        {{ (trigger.from_state.attributes.get('hvac_mode') if trigger.from_state else none) or (trigger.from_state.state if trigger.from_state else none) }}
+      new_mode: >-
+        {{ trigger.to_state.attributes.get('hvac_mode') or trigger.to_state.state }}
+      old_mode_lc: "{{ (old_mode|string).lower() if old_mode else '' }}"
+      new_mode_lc: "{{ (new_mode|string).lower() if new_mode else '' }}"
+      relevant_modes_list: >-
+        {{ relevant_hvac_modes.split(',') | map('trim') | map('lower') | list }}
+      state_ctx_id: "{{ trigger.to_state.context.id }}"
+      t_changed: "{{ trigger.to_state.last_changed }}"
+      new_state: "{{ trigger.to_state.state }}"
+      old_state: "{{ trigger.from_state.state if trigger.from_state else '' }}"
+      user_id: "{{ trigger.to_state.context.user_id | default('unknown') }}"
+      actor_name: >-
+        {{ (states.person | selectattr('attributes.user_id','==', user_id) | map(attribute='name') | first) if user_id != 'unknown' else 'unknown' }}
+      setpoint_changed: >-
+        {{
+          log_setpoint_changes and new_setpoint is not none and (old_setpoint is none or (old_setpoint|string) != (new_setpoint|string))
+        }}
+      hvac_mode_changed: >-
+        {{
+          log_hvac_mode_changes and old_mode_lc != new_mode_lc and (new_mode_lc in relevant_modes_list or old_mode_lc in relevant_modes_list)
+        }}
+      any_relevant_change: "{{ setpoint_changed or hvac_mode_changed }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ any_relevant_change }}"
+        sequence:
+          - event: thermostat_actor_logged
+            event_data:
+              entity_id: "{{ ent }}"
+              monitored_entities: "{{ thermostats }}"
+              state_context_id: "{{ state_ctx_id }}"
+              state_last_changed: "{{ t_changed }}"
+              old_state: "{{ old_state }}"
+              new_state: "{{ new_state }}"
+              old_setpoint: "{{ old_setpoint | default('') }}"
+              new_setpoint: "{{ new_setpoint | default('') }}"
+              old_hvac_mode: "{{ old_mode | default('') }}"
+              new_hvac_mode: "{{ new_mode | default('') }}"
+              setpoint_changed: "{{ setpoint_changed }}"
+              hvac_mode_changed: "{{ hvac_mode_changed }}"
+              change_types: >-
+                {{
+                  (['setpoint'] if setpoint_changed else []) + (['hvac_mode'] if hvac_mode_changed else [])
+                }}
+              actor_type: "user"
+              actor_id: "{{ user_id }}"
+              actor_name: "{{ actor_name }}"
+              detection_method: "context_user"
+      - conditions: []
+        sequence: []
