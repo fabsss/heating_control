@@ -97,7 +97,8 @@ variables:
   is_heating_season: "{{ (heating_on_off != [] and states(heating_on_off) == 'on') or heating_on_off == [] }}"
   is_scheduler_active: "{{ states(schedule_entity) == 'on' }}" # Scheduler in "on"-Zustand
   is_scheduler_enabled: "{{ (office_day_eco_override !=[] and states(office_day_eco_override) == 'off' and scheduler_enabled) or (office_day_eco_override ==[] and scheduler_enabled) }}" # Scheduler ist aktiv und kein Office-Tag
-  was_home_before: "{{ trigger.from_state.state in ['Home', 'Leaving'] }}"
+  was_home_before: "{{ trigger is defined and trigger.from_state is defined and trigger.from_state.state in ['Home', 'Leaving'] }}"
+
   
   # Szenennamen für Referenz- und Restore-Zustände
   reference_scene: "heating_reference_{{ heating_entities | replace('climate.', '') | replace('.', '_') }}"
@@ -120,6 +121,7 @@ trigger:
   - platform: time
     at: !input daily_eco_time
     id: "nightly_eco_time"
+
 action:
   - choose:
       # --- HÖCHSTE PRIORITÄT: HEIZUNG AUS ---
