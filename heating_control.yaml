@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.00)
+  name: Heizungssteuerung (V4.1)
   description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
@@ -177,17 +177,59 @@ action:
             state:
               - "Sleep"
         sequence:
+          # Smart Temperature Setting: Sicherstellen dass Thermostat Temperatur akzeptiert
+          - variables:
+              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') }}"
+              need_temp_restore: "{{ current_hvac_mode == 'off' }}"
+          - if:
+              - condition: template
+                value_template: "{{ need_temp_restore }}"
+            then:
+              # Temporär einschalten für Temperatur-Setting
+              - service: climate.set_hvac_mode
+                target:
+                  entity_id: !input heating_entities
+                data:
+                  hvac_mode: heat
+              - delay: "00:00:02"  # Kurz warten damit Thermostat bereit ist
+          # Temperatur setzen (funktioniert jetzt sicher)
           - service: climate.set_temperature
             target:
               entity_id: !input heating_entities
             data:
               temperature: !input eco_temperature
+          # Falls ursprünglich aus, wieder ausschalten
+          - if:
+              - condition: template
+                value_template: "{{ need_temp_restore }}"
+            then:
+              - service: climate.set_hvac_mode
+                target:
+                  entity_id: !input heating_entities
+                data:
+                  hvac_mode: "{{ current_hvac_mode }}"
               
       # --- NÄCHTLICHE ECO-UMSCHALTUNG UND RESET DER MANUELLEN EINGRIFFE ---
       - conditions:
           - condition: trigger
             id: "nightly_eco_time"
         sequence:
+          # Smart Temperature Setting für nächtliche Umschaltung
+          - variables:
+              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') }}"
+              need_temp_restore: "{{ current_hvac_mode == 'off' }}"
+          - if:
+              - condition: template
+                value_template: "{{ need_temp_restore }}"
+            then:
+              # Temporär einschalten für Temperatur-Setting
+              - service: climate.set_hvac_mode
+                target:
+                  entity_id: !input heating_entities
+                data:
+                  hvac_mode: heat
+              - delay: "00:00:02"
+          # Temperatur setzen
           - service: climate.set_temperature
             target:
               entity_id: !input heating_entities
@@ -204,6 +246,13 @@ action:
                   entity_id: !input heating_entities
                 data:
                   hvac_mode: heat
+            else:
+              - service: climate.set_hvac_mode
+                target:
+                  entity_id: !input heating_entities
+                data:
+                  hvac_mode: off
+
               
       # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT (NUR NACH AWAY UND WENN SZENE EXISTIERT) ---
       - conditions:
@@ -244,11 +293,37 @@ action:
                       - condition: template
                         value_template: "{{ is_heating_season }}"
         then:
+          # Smart Temperature Setting für Scheduler-Aktivierung (Komfort-Temperatur)
+          - variables:
+              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') }}"
+              need_temp_restore: "{{ current_hvac_mode == 'off' }}"
+          - if:
+              - condition: template
+                value_template: "{{ need_temp_restore }}"
+            then:
+              # Temporär einschalten für Temperatur-Setting
+              - service: climate.set_hvac_mode
+                target:
+                  entity_id: !input heating_entities
+                data:
+                  hvac_mode: heat
+              - delay: "00:00:02"
+          # Komfort-Temperatur setzen
           - service: climate.set_temperature
             target:
               entity_id: !input heating_entities
             data:
               temperature: !input comfort_temperature
+          # Falls ursprünglich aus war, wieder ausschalten
+          - if:
+              - condition: template
+                value_template: "{{ need_temp_restore }}"
+            then:
+              - service: climate.set_hvac_mode
+                target:
+                  entity_id: !input heating_entities
+                data:
+                  hvac_mode: "{{ current_hvac_mode }}"
       # Bedingung 2: Scheduler wurde deaktiviert UND Anwesenheitsstatus ist weiterhin "Home"
       - if:
           - condition: and
@@ -268,8 +343,34 @@ action:
               - condition: template
                 value_template: "{{ is_scheduler_enabled and not is_scheduler_active }}"
         then:
+          # Smart Temperature Setting für Scheduler-Deaktivierung (ECO-Temperatur)
+          - variables:
+              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') }}"
+              need_temp_restore: "{{ current_hvac_mode == 'off' }}"
+          - if:
+              - condition: template
+                value_template: "{{ need_temp_restore }}"
+            then:
+              # Temporär einschalten für Temperatur-Setting
+              - service: climate.set_hvac_mode
+                target:
+                  entity_id: !input heating_entities
+                data:
+                  hvac_mode: heat
+              - delay: "00:00:02"
+          # ECO-Temperatur setzen
           - service: climate.set_temperature
             target:
               entity_id: !input heating_entities
             data:
               temperature: !input eco_temperature
+          # Falls ursprünglich aus war, wieder ausschalten
+          - if:
+              - condition: template
+                value_template: "{{ need_temp_restore }}"
+            then:
+              - service: climate.set_hvac_mode
+                target:
+                  entity_id: !input heating_entities
+                data:
+                  hvac_mode: "{{ current_hvac_mode }}"
