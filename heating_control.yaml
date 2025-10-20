@@ -108,10 +108,10 @@ variables:
   # Scheduler-Logik: input_boolean hat Vorrang vor statischer scheduler_enabled Variable
   is_scheduler_enabled: >
     {{ 
-      (scheduler_toggle != [] and states(scheduler_toggle) == 'on') or 
-      (scheduler_toggle == [] and scheduler_enabled)
-    }} and 
-    {{ 
+      (
+        (scheduler_toggle != [] and states(scheduler_toggle) == 'on') or 
+        (scheduler_toggle == [] and scheduler_enabled)
+      ) and 
       (office_day_eco_override == [] or states(office_day_eco_override) == 'off')
     }}
   was_home_before: "{{ trigger is defined and trigger.from_state is defined and trigger.from_state.state in ['Home', 'Leaving'] }}"
