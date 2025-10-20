@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.16)
+  name: Heizungssteuerung (V4.17)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
     
