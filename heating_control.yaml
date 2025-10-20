@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.17)
+  name: Heizungssteuerung (V4.18)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
     
@@ -109,7 +109,8 @@ variables:
 
   # Logik-Variablen
   is_heating_season: "{{ (heating_on_off != [] and states(heating_on_off) == 'on') or heating_on_off == [] }}"
-  is_scheduler_active: "{{ states(schedule_entity) == 'on' }}" # Scheduler in "on"-Zustand
+  # Nur prüfen, wenn eine Schedule-Entity gesetzt ist
+  is_scheduler_active: "{{ schedule_entity != [] and is_state(schedule_entity, 'on') }}" # Scheduler in "on"-Zustand
   # Scheduler-Logik: input_boolean hat Vorrang vor statischer scheduler_enabled Variable
   is_scheduler_enabled: >
     {{ 
@@ -128,6 +129,7 @@ trigger:
   - platform: state
     entity_id: !input flat_occupation_state
     id: "occupation_change"
+  # Heizung An/Aus (Winter-Modus) – löst bei Wechsel auf on/off aus
   - platform: template
     value_template: "{{ heating_on_off != [] and is_state(heating_on_off, ['on', 'off']) }}"
     id: "heating_toggle"
