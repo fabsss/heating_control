@@ -1,6 +1,9 @@
 blueprint:
-  name: Heizungssteuerung (V4.12)
-  description: Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
+  name: Heizungssteuerung (V4.13)
+  description: >
+    Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
+    
+    ⚠️ WICHTIGER HINWEIS: Wenn "Scheduler aktivieren" = true, muss auch eine "Zeitplan" Entity konfiguriert werden!
   domain: automation
   source_url: https://github.com/fabsss/heating_control/blob/main/heating_control.yaml
   input:
@@ -55,7 +58,7 @@ blueprint:
         boolean: {}
     scheduler_toggle:
       name: (Optional) Scheduler Ein/Aus Toggle
-      description: Optional - Input Boolean zur Laufzeit-Steuerung des Schedulers. Hat Vorrang vor "scheduler_enabled".
+      description: Optional - Input Boolean zur Laufzeit-Steuerung des Schedulers. Hat Vorrang vor "Scheduler aktivieren".
       default: []
       selector:
         entity:
@@ -63,7 +66,9 @@ blueprint:
           multiple: false
     schedule_entity:
       name: (Optional) Zeitplan
-      description: Schedule-Helper für die Komforttemperatur-Zeiten. Wird nur benötigt, wenn der Scheduler aktiviert ist.
+      description: >
+        Schedule-Helper für die Komforttemperatur-Zeiten. 
+        WICHTIG: Wird benötigt wenn "Scheduler aktivieren" = true ist oder eine Scheduler Toggle-Variable übergeben wird.
       default: []
       selector:
         entity:
@@ -128,7 +133,7 @@ trigger:
     id: "heating_toggle"
     enabled: "{{ heating_on_off != [] }}"
   - platform: state
-    enabled: "{{ scheduler_enabled and schedule_entity != [] }}"
+    enabled: "{{ scheduler_enabled }}"
     entity_id: !input schedule_entity
     id: "schedule_change"
   - platform: state
@@ -140,6 +145,24 @@ trigger:
     id: "nightly_eco_time"
 
 action:
+  # Validierung: Scheduler aktiviert aber keine Schedule Entity gesetzt
+  - if:
+      - condition: template
+        value_template: "{{ scheduler_enabled and schedule_entity == [] }}"
+    then:
+      - service: persistent_notification.create
+        data:
+          title: "❌ Heizungssteuerung Konfigurationsfehler"
+          message: >
+            Die Automation "{{ this.attributes.friendly_name }}" ist fehlerhaft konfiguriert:
+            
+            - "Scheduler aktivieren" ist auf TRUE gesetzt
+            - Aber "Zeitplan" Entity ist nicht konfiguriert
+            
+            Bitte korrigieren Sie die Automation-Konfiguration!
+          notification_id: "heating_control_config_error_{{ this.entity_id | replace('.', '_') }}"
+      - stop: "Konfigurationsfehler: Scheduler aktiviert aber keine Schedule Entity"
+      
   - choose:
       # --- HÖCHSTE PRIORITÄT: HEIZUNG AUS ---
       - conditions:
