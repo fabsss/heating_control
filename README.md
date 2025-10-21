@@ -295,6 +295,95 @@ Nächtliche Eco-Zeit: 01:00:00
 
 ---
 
+## 🔍 Zusätzlicher Blueprint: TRV Actor Logging
+
+Dieses Repository enthält einen zweiten Blueprint zur **Protokollierung von Thermostat-Änderungen**: [`log_trv_actor_with_context.yaml`](log_trv_actor_with_context.yaml)
+
+### Was macht dieser Blueprint?
+
+Erfasst **manuelle Änderungen** an Thermostaten und erstellt detaillierte Event-Logs:
+- 📊 **Setpoint-Änderungen**: Protokolliert Temperaturänderungen
+- 🎚️ **HVAC-Mode-Änderungen**: Erfasst Modusänderungen (heat, off, etc.)
+- 👤 **Actor-Tracking**: Identifiziert welcher Benutzer die Änderung vorgenommen hat
+- 🔗 **Context-ID-Verknüpfung**: Nutzt `context.id` für exakte Zuordnung
+
+### Anwendungsfälle
+
+- **Debugging**: Verstehe warum und von wem dein Thermostat geändert wurde
+- **Analyse**: Tracke manuelle Überschreibungen deiner Automationen
+- **Audit**: Protokolliere alle Änderungen für spätere Auswertung
+- **Integration**: Reagiere auf User-Änderungen mit eigenen Automationen
+
+### Features
+
+✅ **Multi-Thermostat-Unterstützung**: Überwache mehrere Thermostaten gleichzeitig  
+✅ **Selektive Protokollierung**: Wähle ob Setpoint, HVAC-Mode oder beides geloggt wird  
+✅ **Filterbare HVAC-Modi**: Definiere welche Modi relevant sind (z.B. nur "heat, off")  
+✅ **Event-basiert**: Erstellt `thermostat_actor_logged` Events für einfache Weiterverarbeitung  
+✅ **Context-ID-Tracking**: Präzise Zuordnung über `state_context_id`
+
+### Blueprint-Konfiguration
+
+| Eingabe | Beschreibung | Standard |
+|---------|--------------|----------|
+| **Thermostat entities** | Ein oder mehrere Climate-Entities | - |
+| **Setpoint-Änderungen protokollieren** | Logge Temperaturänderungen | `true` |
+| **HVAC-Mode-Änderungen protokollieren** | Logge Modusänderungen | `true` |
+| **Relevante HVAC-Modi** | CSV-Liste der zu trackenden Modi | `"heat, off"` |
+
+### Event-Datenstruktur
+
+Das erstellte `thermostat_actor_logged` Event enthält:
+
+```yaml
+entity_id: climate.wohnzimmer_thermostat
+state_context_id: "abc123..."              # Context-ID des State-Changes
+state_last_changed: "2025-10-21T14:30:00"
+old_setpoint: "20.0"
+new_setpoint: "22.0"
+old_hvac_mode: "heat"
+new_hvac_mode: "heat"
+setpoint_changed: true
+hvac_mode_changed: false
+change_types: ["setpoint"]                  # Liste: setpoint, hvac_mode
+actor_type: "user"
+actor_id: "abc123user"                      # User-ID aus context
+actor_name: "Fabian"                        # Resolved von person entity
+detection_method: "context_user"
+```
+
+### Verwendung mit anderen Automationen
+
+Du kannst auf diese Events reagieren:
+
+```yaml
+trigger:
+  - platform: event
+    event_type: thermostat_actor_logged
+    event_data:
+      entity_id: climate.wohnzimmer_thermostat
+      setpoint_changed: true
+
+action:
+  - service: notify.mobile_app
+    data:
+      message: >
+        {{ trigger.event.data.actor_name }} hat die Temperatur 
+        von {{ trigger.event.data.old_setpoint }}° 
+        auf {{ trigger.event.data.new_setpoint }}° geändert!
+```
+
+### Installation
+
+[![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/fabsss/heating_control/blob/main/log_trv_actor_with_context.yaml)
+
+Oder manuell über die URL:
+```
+https://github.com/fabsss/heating_control/blob/main/log_trv_actor_with_context.yaml
+```
+
+---
+
 ## 🤝 Beitragen
 
 Fehler gefunden? Feature-Wunsch? 
