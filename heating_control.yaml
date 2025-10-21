@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.18)
+  name: Heizungssteuerung (V4.19)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
     
@@ -131,13 +131,24 @@ trigger:
     id: "occupation_change"
   # Heizung An/Aus (Winter-Modus) – löst bei Wechsel auf on/off aus
   - platform: template
-    value_template: "{{ heating_on_off != [] and is_state(heating_on_off, ['on', 'off']) }}"
+    value_template: "{{ heating_on_off != [] and states(heating_on_off) == 'on' }}"
     id: "heating_toggle"
   - platform: template
-    value_template: "{{ scheduler_enabled and schedule_entity != [] and is_state(schedule_entity, ['on', 'off']) }}"
+    value_template: "{{ heating_on_off != [] and states(heating_on_off) == 'off' }}"
+    id: "heating_toggle"
+  # Scheduler – löst bei Wechsel auf on/off aus
+  - platform: template
+    value_template: "{{ schedule_entity != [] and states(schedule_entity) == 'on' }}"
     id: "schedule_change"
   - platform: template
-    value_template: "{{ scheduler_toggle != [] and is_state(scheduler_toggle, ['on', 'off']) }}"
+    value_template: "{{ schedule_entity != [] and states(schedule_entity) == 'off' }}"
+    id: "schedule_change"
+  # Scheduler Toggle – löst bei Wechsel auf on/off aus
+  - platform: template
+    value_template: "{{ scheduler_toggle != [] and states(scheduler_toggle) == 'on' }}"
+    id: "scheduler_toggle_change"
+  - platform: template
+    value_template: "{{ scheduler_toggle != [] and states(scheduler_toggle) == 'off' }}"
     id: "scheduler_toggle_change"
   - platform: time
     at: !input daily_eco_time
