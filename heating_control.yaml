@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.22)
+  name: Heizungssteuerung (V4.23)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
     
@@ -144,11 +144,15 @@ trigger:
     value_template: "{{ heating_on_off != [] and is_state(heating_on_off, 'off') }}"
     id: "heating_toggle"
   - platform: template
-    value_template: "{{ schedule_entity != [] and (is_state(schedule_entity, 'on') or is_state(schedule_entity, 'off')}}"
+    value_template: >
+      {{ schedule_entity != [] and
+         (trigger is defined and
+          trigger.entity_id == schedule_entity and
+          trigger.from_state is defined and
+          trigger.to_state is defined and
+          trigger.from_state.state != trigger.to_state.state and
+          trigger.to_state.state in ['on', 'off']) }}
     id: "schedule_change"
-  # - platform: template
-  #   value_template: "{{ schedule_entity != [] and is_state(schedule_entity, 'off') }}"
-  #   id: "schedule_change"
   - platform: template
     value_template: "{{ scheduler_toggle != [] and is_state(scheduler_toggle, 'on') }}"
     id: "scheduler_toggle_change"
