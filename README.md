@@ -1,47 +1,53 @@
-Robust Presence-Based Heating Control Blueprint for Home Assistant
-This blueprint creates a powerful and highly customizable automation to control your climate entities (thermostats, TRVs) based on the occupancy state of your home. It's designed to be robust, handling various edge cases and prioritizing user actions to create a predictable and efficient heating schedule.
+# 🏠 Heizungssteuerung Blueprint für Home Assistant
 
-The logic prioritizes specific states, handles manual overrides gracefully, and includes special modes for guests and vacations, ensuring your heating is always in the right state without wasting energy.
+Ein leistungsstarkes und flexibles Blueprint zur automatischen Steuerung deiner Heizung basierend auf Anwesenheitsstatus, Zeitplänen und intelligenter Priorisierung.
 
-🚀 Features
-Occupancy-Based Control: Automatically adjusts heating based on an input_select helper that defines your home's status (e.g., Home, Away, Sleep).
+[![Version](https://img.shields.io/badge/Version-4.21-blue.svg)](https://github.com/fabsss/heating_control)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-green.svg)](https://www.home-assistant.io/)
+[![Blueprint](https://img.shields.io/badge/Blueprint-Import-orange.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/fabsss/heating_control/blob/main/heating_control.yaml)
 
-Global Master Switch: A main input_boolean acts as a "Winter Mode" switch to enable or disable the entire heating logic with a single click.
+---
 
-Intelligent State-Saving: Saves the state of your thermostats (temperature and mode) when you leave and restores it upon your return. This ensures that any manual adjustments you make are not lost.
+## ✨ Features
 
-Priority-Driven Logic: The automation follows a strict priority list to avoid conflicts:
+### 🎯 Kernfunktionen
+- **Anwesenheitsbasierte Steuerung**: Automatische Anpassung der Heiztemperatur basierend auf dem Wohnungsstatus
+- **Intelligente Priorisierung**: Klare Hierarchie verhindert Konflikte zwischen verschiedenen Modi
+- **Smart Temperature Setting**: Thermostaten akzeptieren Temperaturänderungen auch im "Off"-Modus durch temporäres Einschalten
+- **Optionaler Winter-Modus**: Globaler An/Aus-Schalter für die gesamte Heizungslogik
+- **Zeitplansteuerung**: Flexibler Scheduler für Komfort-Temperatur zu definierten Zeiten
 
-Off/Vacation: Highest priority; always turns the heating off.
+### 🚀 Erweiterte Features
+- **Office-Override**: Deaktiviert den Scheduler an Arbeitstagen im Büro
+- **Scheduler-Toggle**: Laufzeit-Steuerung des Schedulers per Input Boolean
+- **Nächtliche Eco-Umschaltung**: Automatische Absenkung im Guest Mode
+- **Template-Trigger-Technologie**: Zuverlässiges Triggern auch bei optionalen Entities
+- **Validierung**: Automatische Prüfung der Konfiguration mit Fehlerbenachrichtigungen
 
-Away/Sleep: Forces the heating to a configurable Eco temperature.
+---
 
-Scheduler: A time-based scheduler can set a Comfort temperature, but only if no higher-priority state is active.
+## 📋 Voraussetzungen
 
-Special Modes:
+### Erforderliche Helper
+Erstelle folgende Helper unter **Einstellungen → Geräte & Dienste → Helfer**:
 
-Guest Mode: Prevents the scheduler from running and can optionally set the heating to Eco temperature at night.
+#### 1. Anwesenheitsstatus (input_select) - **Pflicht**
+Verwaltet den Status deiner Wohnung.
 
-Vacation Mode: Turns all heating completely off.
+**Erforderliche Optionen:**
+- `Home` - Zu Hause
+- `Away` - Abwesend
+- `Sleep` - Schlafmodus
+- `Leaving` - Beim Verlassen
+- `Coming Home` - Beim Heimkommen
+- `Guest Mode` - Gäste-Modus
+- `Vacation` - Urlaubsmodus
 
-Smart Activation: When you enable the master switch, the automation immediately checks the current occupancy state and applies the correct temperature, rather than waiting for the next state change.
-
-Configurable Temperatures: Easily set your desired Eco and Comfort temperatures directly in the blueprint UI.
-
-📋 Requirements
-Before using this blueprint, you need to create a few Helper entities in Home Assistant (under Settings > Devices & Services > Helpers).
-
-Occupancy Status (input_select): This helper tracks the presence status.
-
-Required Options: Home, Away, Sleep, Leaving, Coming Home, Guest Mode, Vacation. You can add more, but these are essential for the logic.
-
-Example Configuration (in configuration.yaml):
-
-YAML
-
+**Beispiel-Konfiguration** (`configuration.yaml`):
+```yaml
 input_select:
   flat_occupation_state:
-    name: Occupancy Status
+    name: Wohnungsstatus
     options:
       - "Home"
       - "Away"
@@ -51,70 +57,258 @@ input_select:
       - "Guest Mode"
       - "Vacation"
     icon: mdi:home-account
-Master Heating Switch (input_boolean): This is your main on/off switch for the heating season.
+```
 
-Example Name: Heating Season On
+#### 2. Optionale Helper
 
-Scheduler Switch (input_boolean) (Optional): If you want to use a time-based schedule (e.g., from the scheduler-card integration or another automation), create a boolean helper that turns on when the schedule is active.
+**Heizung An/Aus (input_boolean)** - Optional
+- Winter-Modus für die gesamte Heizungslogik
+- Wenn nicht gesetzt: Heizung ist immer aktiv
 
-Example Name: Heating Schedule Active
+**Zeitplan (schedule)** - Optional, aber erforderlich wenn Scheduler aktiviert
+- Schedule Helper für Komfort-Temperatur-Zeiten
+- Erstelle über: Einstellungen → Geräte & Dienste → Helfer → Zeitplan
 
-🛠️ Blueprint Inputs
-Input	Description
-Heating Entities	(Required) The climate entities you want to control (e.g., your thermostats).
-Occupancy Status	(Required) The input_select helper you created for tracking the home's status.
-Heating On/Off	(Required) The input_boolean master switch for enabling/disabling the logic.
-Eco Temperature	The temperature (in °C) to be set for Away, Sleep, and during the night in Guest Mode.
-Comfort Temperature	The temperature (in °C) to be set when the optional scheduler is active.
-Enable Scheduler	A checkbox to enable or disable the scheduler functionality.
-Scheduler Switch	(Optional) The input_boolean helper that indicates if your heating schedule is currently active.
-Nightly Eco Time	The time of day to switch the heating to Eco temperature when Guest Mode is active.
+**Scheduler Toggle (input_boolean)** - Optional
+- Laufzeit-Steuerung des Schedulers
+- Hat Vorrang vor der statischen "Scheduler aktivieren" Einstellung
 
-Export to Sheets
-⚙️ How It Works
-The automation is triggered by any change in the selected input entities. It then follows a choose logic to determine the correct action based on a clear hierarchy.
+**Office-Override (binary_sensor)** - Optional
+- Deaktiviert Scheduler an Arbeitstagen im Büro
+- Beispiel: Template-Sensor für Arbeitstage
 
-Is the system off?
+---
 
-If the Heating On/Off switch is off OR the Occupancy Status is Vacation, the thermostats are turned off. This is the highest priority.
+## ⚙️ Blueprint-Eingaben
 
-Is anyone Away or Sleeping?
+### Pflichtfelder
 
-If the Occupancy Status changes to Away or Sleep, the heating is immediately set to the Eco Temperature. This overrides the scheduler.
+| Eingabe | Typ | Beschreibung |
+|---------|-----|--------------|
+| **Heizkörper** | Climate Entity | Der zu steuernde Thermostat |
+| **Anwesenheitsstatus** | Input Select | Status der Wohnung (siehe Voraussetzungen) |
 
-Is it nighttime for guests?
+### Temperaturen
 
-If Guest Mode is active and the current time matches the Nightly Eco Time, the heating is set to Eco Temperature (only if it wasn't already off).
+| Eingabe | Standard | Beschreibung |
+|---------|----------|--------------|
+| **Eco-Temperatur** | 17°C | Temperatur für Away, Sleep, nächtlicher Reset |
+| **Komfort-Temperatur** | 21°C | Temperatur wenn Scheduler aktiv |
 
-Is someone leaving?
+### Scheduler-Optionen (Optional)
 
-When the status changes from Home to Away or Leaving, the automation calls scene.create to take a "snapshot" of the current thermostat states (temperature, mode, etc.).
+| Eingabe | Typ | Standard | Beschreibung |
+|---------|-----|----------|--------------|
+| **Scheduler aktivieren** | Boolean | `false` | Aktiviert die Zeitplan-Funktion |
+| **Zeitplan** | Schedule | - | Schedule Helper für Komfort-Zeiten ⚠️ |
+| **Scheduler Toggle** | Input Boolean | - | Runtime-Steuerung (hat Vorrang) |
+| **Office-Override** | Binary Sensor | - | Deaktiviert Scheduler bei Arbeitstagen |
 
-Note: This snapshot is stored in memory and does not survive a Home Assistant restart.
+⚠️ **Wichtig**: Wenn "Scheduler aktivieren" = `true`, muss eine Zeitplan-Entity konfiguriert werden!
 
-Is someone coming home?
+### Weitere Optionen
 
-When the status changes to Coming Home or Home, the previously saved scene is restored. This brings your heating back to the exact state it was in before you left.
+| Eingabe | Typ | Standard | Beschreibung |
+|---------|-----|----------|--------------|
+| **Heizung An/Aus** | Input Boolean | - | Globaler Winter-Modus Schalter |
+| **Nächtliche Eco-Zeit** | Time | 01:00 | Zeit für Eco-Umschaltung im Guest Mode |
 
-This logic is skipped if changing from states like Guest Mode or Vacation to prevent restoring an irrelevant temperature.
+---
 
-Should the scheduler run?
+## 🔄 Funktionsweise & Prioritäten
 
-If none of the above conditions are met, the automation checks if the Scheduler is enabled and its corresponding input_boolean is on.
+Die Automation folgt einer **klaren Prioritätshierarchie**:
 
-If so, and if the Occupancy Status is Home, it sets the heating to the Comfort Temperature.
+### Priorität 1: 🛑 Heizung AUS
+**Bedingungen:**
+- Winter-Modus ist deaktiviert (`heating_on_off = off`)
+- **ODER** Anwesenheitsstatus = `Vacation`
 
-📦 Setup Instructions
-Import the Blueprint: Click the button below to import this blueprint into your Home Assistant instance.
+**Aktion:** Thermostat wird ausgeschaltet
 
-Create an Automation:
+---
 
-Navigate to Settings > Automations & Scenes.
+### Priorität 2: 🚪 Verlassen der Wohnung
+**Bedingungen:**
+- Status wechselt von `Home` oder `Leaving` zu `Away`
 
-Click Create Automation and select the Robust Presence-Based Heating Control blueprint.
+**Aktion:** Thermostat auf HVAC-Modus `off` setzen
 
-Fill in all the required entities and configure the temperatures and optional features to your liking.
+---
 
-Save the automation.
+### Priorität 3: 😴 Sleep-Modus
+**Bedingungen:**
+- Status wechselt zu `Sleep`
 
-Your intelligent heating control is now ready!
+**Aktion:** 
+- Eco-Temperatur setzen
+- Smart Temperature Setting: Temporär einschalten falls nötig
+
+---
+
+### Priorität 4: 🌙 Nächtliche Eco-Umschaltung
+**Bedingungen:**
+- Zeitpunkt = Konfigurierte "Nächtliche Eco-Zeit"
+
+**Aktion:**
+- Eco-Temperatur setzen
+- Bei Status `Home`: HVAC-Modus `heat`
+- Bei anderen Status: HVAC-Modus `off`
+
+---
+
+### Priorität 5: 🏠 Nach Hause kommen
+**Bedingungen:**
+- Status wechselt von `Away` zu `Coming Home` oder `Home`
+
+**Aktion:** HVAC-Modus auf `heat` setzen
+
+---
+
+### Standard-Logik: 📅 Scheduler
+
+**Komfort-Temperatur aktivieren wenn:**
+- Scheduler ist enabled (`scheduler_enabled = true` oder `scheduler_toggle = on`)
+- Schedule ist aktiv (`schedule_entity = on`)
+- Office-Override ist nicht aktiv oder nicht konfiguriert
+- Trigger war: `schedule_change`, `scheduler_toggle_change` oder `heating_toggle`
+
+**Eco-Temperatur aktivieren wenn:**
+- Scheduler ist enabled
+- Schedule ist **nicht** aktiv (`schedule_entity = off`)
+- Selbe Trigger-Bedingungen wie oben
+
+---
+
+## 🔧 Smart Temperature Setting
+
+Ein besonderes Feature für Thermostaten, die im "Off"-Modus keine Temperaturen akzeptieren:
+
+```yaml
+1. Aktuellen HVAC-Modus speichern
+2. Falls "off": Temporär auf "heat" schalten
+3. 2 Sekunden warten
+4. Temperatur setzen
+5. Falls vorher "off": Wieder auf "off" schalten
+```
+
+Dies garantiert, dass Temperaturänderungen immer funktionieren!
+
+---
+
+## 📦 Installation
+
+### Methode 1: Automatischer Import
+[![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/fabsss/heating_control/blob/main/heating_control.yaml)
+
+### Methode 2: Manuelle Installation
+1. Kopiere den Inhalt von [`heating_control.yaml`](heating_control.yaml)
+2. Gehe zu **Einstellungen → Automationen & Szenen**
+3. Klicke auf **Blueprints** → **Blueprint importieren**
+4. Füge die URL ein: `https://github.com/fabsss/heating_control/blob/main/heating_control.yaml`
+
+---
+
+## 🚀 Schnellstart
+
+1. **Helper erstellen** (siehe [Voraussetzungen](#-voraussetzungen))
+2. **Automation anlegen**:
+   - Gehe zu **Einstellungen → Automationen & Szenen**
+   - **Automation erstellen** → **Blueprint verwenden**
+   - Wähle **Heizungssteuerung (V4.21)**
+3. **Konfigurieren**:
+   - Heizkörper auswählen
+   - Anwesenheitsstatus-Helper zuweisen
+   - Optional: Winter-Modus, Scheduler, etc. konfigurieren
+4. **Speichern & Testen**! 🎉
+
+---
+
+## 💡 Beispiel-Konfigurationen
+
+### Minimale Konfiguration
+```yaml
+Heizkörper: climate.wohnzimmer_thermostat
+Anwesenheitsstatus: input_select.flat_occupation_state
+Eco-Temperatur: 17°C
+Komfort-Temperatur: 21°C
+```
+
+### Mit Scheduler
+```yaml
+Heizkörper: climate.wohnzimmer_thermostat
+Anwesenheitsstatus: input_select.flat_occupation_state
+Scheduler aktivieren: ✓
+Zeitplan: schedule.heating_schedule
+Eco-Temperatur: 17°C
+Komfort-Temperatur: 22°C
+```
+
+### Vollständige Konfiguration
+```yaml
+Heizkörper: climate.buero_thermostat
+Anwesenheitsstatus: input_select.flat_occupation_state
+Heizung An/Aus: input_boolean.winter_mode
+Scheduler aktivieren: ✓
+Zeitplan: schedule.heating_schedule_office
+Scheduler Toggle: input_boolean.scheduler_override
+Office-Override: binary_sensor.office_day_template
+Eco-Temperatur: 17°C
+Komfort-Temperatur: 21°C
+Nächtliche Eco-Zeit: 01:00:00
+```
+
+---
+
+## 🐛 Fehlerbehebung
+
+### Scheduler triggert nicht
+**Problem:** Schedule-Entity wechselt, aber nichts passiert
+
+**Lösung:**
+1. Prüfe, ob `scheduler_enabled = true` ist
+2. Stelle sicher, dass eine `schedule_entity` konfiguriert ist
+3. Prüfe, ob `office_day_eco_override` die Scheduler-Logik blockiert
+
+### Konfigurationsfehler beim Speichern
+**Problem:** `Message malformed: ...`
+
+**Lösung:** 
+- Wenn "Scheduler aktivieren" = `true`, muss eine Schedule-Entity gewählt werden
+- Die Automation zeigt eine persistente Benachrichtigung bei Fehlkonfiguration
+
+### Template-Fehler
+**Problem:** `TypeError: unhashable type: 'list'`
+
+**Lösung:** Dieses Blueprint verwendet `trigger_variables` und Template-Trigger zur sicheren Behandlung optionaler Entities. Stelle sicher, dass du die neueste Version (V4.21+) verwendest.
+
+---
+
+## 🔄 Updates & Changelog
+
+### Version 4.21 (Aktuell)
+- ✅ Template-Trigger mit `trigger_variables` für zuverlässiges Triggern
+- ✅ Smart Temperature Setting für Thermostaten
+- ✅ Vollständige Unterstützung optionaler Entities mit `default: []`
+- ✅ Office-Override Feature
+- ✅ Konfigurationsvalidierung mit Fehlerbenachrichtigungen
+
+---
+
+## 🤝 Beitragen
+
+Fehler gefunden? Feature-Wunsch? 
+- [Issue erstellen](https://github.com/fabsss/heating_control/issues)
+- [Pull Request einreichen](https://github.com/fabsss/heating_control/pulls)
+
+---
+
+## 📄 Lizenz
+
+Dieses Blueprint ist unter der MIT-Lizenz veröffentlicht.
+
+---
+
+## ⭐ Gefällt dir dieses Blueprint?
+
+Gib dem Repository einen Stern auf GitHub! ⭐
