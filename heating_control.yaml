@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.19)
+  name: Heizungssteuerung (V4.20)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
     
@@ -23,7 +23,7 @@ blueprint:
     heating_on_off:
       name: (Optional) Heizung An/Aus (Winter-Modus)
       description: Optional - Input Boolean, der die Heizungssteuerung global aktiviert oder deaktiviert. Wenn nicht gesetzt, ist die Heizung immer aktiv.
-      default: []
+      default:
       selector:
         entity:
           domain: input_boolean
@@ -59,7 +59,7 @@ blueprint:
     scheduler_toggle:
       name: (Optional) Scheduler Ein/Aus Toggle
       description: Optional - Input Boolean zur Laufzeit-Steuerung des Schedulers. Hat Vorrang vor "Scheduler aktivieren".
-      default: []
+      default:
       selector:
         entity:
           domain: input_boolean
@@ -69,7 +69,7 @@ blueprint:
       description: >
         Schedule-Helper für die Komforttemperatur-Zeiten. 
         WICHTIG: Wird benötigt wenn "Scheduler aktivieren" = true ist oder eine Scheduler Toggle-Variable übergeben wird.
-      default: []
+      default:
       selector:
         entity:
           domain: schedule
@@ -77,7 +77,7 @@ blueprint:
     office_day_eco_override:
       name: (Optional) Office-Modus (Scheduler deaktiviert)
       description: Optional - Binary Sensor, welche aktiv ist wenn an einem Arbeitstag im Büro gearbeitet wird. In diesem Fall wird der Scheduler ignoriert.
-      default: []
+      default:
       selector:
         entity:
           domain: binary_sensor
@@ -108,17 +108,17 @@ variables:
   # Keine scene_id Variable mehr nötig, wird durch restore_scene ersetzt
 
   # Logik-Variablen
-  is_heating_season: "{{ (heating_on_off != [] and states(heating_on_off) == 'on') or heating_on_off == [] }}"
+  is_heating_season: "{{ (heating_on_off != none and states(heating_on_off) == 'on') or heating_on_off == none }}"
   # Nur prüfen, wenn eine Schedule-Entity gesetzt ist
-  is_scheduler_active: "{{ schedule_entity != [] and is_state(schedule_entity, 'on') }}" # Scheduler in "on"-Zustand
+  is_scheduler_active: "{{ schedule_entity != none and is_state(schedule_entity, 'on') }}" # Scheduler in "on"-Zustand
   # Scheduler-Logik: input_boolean hat Vorrang vor statischer scheduler_enabled Variable
   is_scheduler_enabled: >
     {{ 
       (
-        (scheduler_toggle != [] and states(scheduler_toggle) == 'on') or 
-        (scheduler_toggle == [] and scheduler_enabled)
+        (scheduler_toggle != none and states(scheduler_toggle) == 'on') or 
+        (scheduler_toggle == none and scheduler_enabled)
       ) and 
-      (office_day_eco_override == [] or states(office_day_eco_override) == 'off')
+      (office_day_eco_override == none or states(office_day_eco_override) == 'off')
     }}
   was_home_before: "{{ trigger is defined and trigger.from_state is defined and trigger.from_state.state in ['Home', 'Leaving'] }}"
 
@@ -129,26 +129,15 @@ trigger:
   - platform: state
     entity_id: !input flat_occupation_state
     id: "occupation_change"
-  # Heizung An/Aus (Winter-Modus) – löst bei Wechsel auf on/off aus
-  - platform: template
-    value_template: "{{ heating_on_off != [] and states(heating_on_off) == 'on' }}"
+  # Optionale Trigger - werden automatisch deaktiviert wenn Entity nicht gesetzt
+  - platform: state
+    entity_id: !input heating_on_off
     id: "heating_toggle"
-  - platform: template
-    value_template: "{{ heating_on_off != [] and states(heating_on_off) == 'off' }}"
-    id: "heating_toggle"
-  # Scheduler – löst bei Wechsel auf on/off aus
-  - platform: template
-    value_template: "{{ schedule_entity != [] and states(schedule_entity) == 'on' }}"
+  - platform: state
+    entity_id: !input schedule_entity
     id: "schedule_change"
-  - platform: template
-    value_template: "{{ schedule_entity != [] and states(schedule_entity) == 'off' }}"
-    id: "schedule_change"
-  # Scheduler Toggle – löst bei Wechsel auf on/off aus
-  - platform: template
-    value_template: "{{ scheduler_toggle != [] and states(scheduler_toggle) == 'on' }}"
-    id: "scheduler_toggle_change"
-  - platform: template
-    value_template: "{{ scheduler_toggle != [] and states(scheduler_toggle) == 'off' }}"
+  - platform: state
+    entity_id: !input scheduler_toggle
     id: "scheduler_toggle_change"
   - platform: time
     at: !input daily_eco_time
@@ -158,7 +147,7 @@ action:
   # Validierung: Scheduler aktiviert aber keine Schedule Entity gesetzt
   - if:
       - condition: template
-        value_template: "{{ scheduler_enabled and schedule_entity == [] }}"
+        value_template: "{{ scheduler_enabled and schedule_entity == none }}"
     then:
       - service: persistent_notification.create
         data:
