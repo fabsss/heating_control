@@ -84,7 +84,7 @@ blueprint:
           multiple: false
           
     # Optionaler täglicher Reset
-    daily_eco_time:
+    nightly_eco_time:
       name: Zeit für nächtliche Eco-Umschaltung
       description: Die Uhrzeit, zu der die Heizung im "Guest Mode" auf Eco gesetzt wird.
       default: "01:00:00"
@@ -156,7 +156,7 @@ trigger:
     value_template: "{{ scheduler_toggle != [] and is_state(scheduler_toggle, 'off') }}"
     id: "scheduler_toggle_change"
   - platform: time
-    at: !input daily_eco_time
+    at: !input nightly_eco_time
     id: "nightly_eco_time"
 
 action:
