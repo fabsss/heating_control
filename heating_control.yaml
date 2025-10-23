@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.22)
+  name: Heizungssteuerung (V4.23)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
     
@@ -277,7 +277,9 @@ action:
           - if:
             - condition: state
               entity_id: !input flat_occupation_state
-              state: "Home"
+              state: 
+                - "Home"
+                - "Guest Mode"
             then:
               - service: climate.set_hvac_mode
                 target:
@@ -289,7 +291,7 @@ action:
                 target:
                   entity_id: !input heating_entities
                 data:
-                  hvac_mode: off
+                  hvac_mode: "off"
 
               
       # --- ZUSTAND WIEDERHERSTELLEN BEI ANKUNFT (NUR NACH AWAY UND WENN SZENE EXISTIERT) ---
