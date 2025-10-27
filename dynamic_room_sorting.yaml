@@ -1,0 +1,317 @@
+# ============================================================================
+# Dynamische Raum-Sortierung basierend auf Anwesenheitshistorie
+# ============================================================================
+# 
+# Ziel: Räume werden in der Reihenfolge angezeigt, wie du sie besucht hast.
+# Der aktuelle Raum steht immer an erster Stelle.
+#
+# Eingabe: sensor.fabians_s22_presence_tracker_area_last_seen
+# Ausgabe: input_text.room_history_sorted (JSON-Array der Raum-IDs/Namen)
+#
+# Version: 1.0
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# SCHRITT 1: Helper erstellen
+# ----------------------------------------------------------------------------
+# Gehe zu: Einstellungen → Geräte & Dienste → Helfer
+#
+# 1. Input Text Helper für die sortierte Raumliste:
+#    Name: "Room History Sorted"
+#    Entity-ID: input_text.room_history_sorted
+#    Max. Länge: 255
+#
+# 2. Input Text Helper für die Raum-Historie (Ringpuffer):
+#    Name: "Room History Raw"
+#    Entity-ID: input_text.room_history_raw
+#    Max. Länge: 255
+#
+# Oder in configuration.yaml:
+# ----------------------------------------------------------------------------
+
+input_text:
+  room_history_sorted:
+    name: Sortierte Raum-Historie
+    max: 255
+    initial: "[]"
+  
+  room_history_raw:
+    name: Raum-Historie (Ringpuffer)
+    max: 255
+    initial: "[]"
+
+# ----------------------------------------------------------------------------
+# SCHRITT 2: Automation für Tracking
+# ----------------------------------------------------------------------------
+
+automation:
+  - id: track_room_presence_history
+    alias: "Track Room Presence History"
+    description: >
+      Aktualisiert die Raum-Historie wenn sich der Aufenthaltsort ändert.
+      Speichert maximal die letzten 10 besuchten Räume.
+    
+    trigger:
+      - platform: state
+        entity_id: sensor.fabians_s22_presence_tracker_area_last_seen
+    
+    condition:
+      # Nur triggern wenn neuer Raum nicht leer/unknown ist
+      - condition: template
+        value_template: >
+          {{ trigger.to_state.state not in ['unknown', 'unavailable', ''] }}
+    
+    action:
+      - variables:
+          # Aktueller Raum
+          current_room: "{{ states('sensor.fabians_s22_presence_tracker_area_last_seen') }}"
+          
+          # Bisherige Historie laden (JSON-Array)
+          history_raw: >
+            {% set hist = states('input_text.room_history_raw') %}
+            {% if hist in ['unknown', '', 'unavailable'] %}
+              []
+            {% else %}
+              {{ hist | from_json | default([]) }}
+            {% endif %}
+          
+          # Maximale Anzahl gespeicherter Räume
+          max_history_length: 10
+      
+      - variables:
+          # Neuer Raum zur Liste hinzufügen (vorne)
+          # Duplikate entfernen: Wenn Raum bereits in Liste, zuerst entfernen
+          history_without_current: >
+            {{ history_raw | reject('eq', current_room) | list }}
+          
+          # Aktuellen Raum vorne einfügen
+          new_history: >
+            {{ ([current_room] + history_without_current)[:max_history_length] }}
+      
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.room_history_raw
+        data:
+          value: "{{ new_history | to_json }}"
+      
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.room_history_sorted
+        data:
+          value: "{{ new_history | to_json }}"
+
+# ----------------------------------------------------------------------------
+# SCHRITT 3: Template Sensor für lesbare Ausgabe (optional)
+# ----------------------------------------------------------------------------
+
+template:
+  - sensor:
+      - name: "Current Room Name"
+        unique_id: current_room_name
+        state: "{{ states('sensor.fabians_s22_presence_tracker_area_last_seen') }}"
+        icon: mdi:map-marker
+      
+      - name: "Room History List"
+        unique_id: room_history_list
+        state: >
+          {% set hist = states('input_text.room_history_sorted') %}
+          {% if hist in ['unknown', '', 'unavailable'] %}
+            Keine Historie
+          {% else %}
+            {% set rooms = hist | from_json | default([]) %}
+            {{ rooms | join(' → ') if rooms | length > 0 else 'Keine Historie' }}
+          {% endif %}
+        icon: mdi:format-list-numbered
+        attributes:
+          room_count: >
+            {% set hist = states('input_text.room_history_sorted') %}
+            {% if hist not in ['unknown', '', 'unavailable'] %}
+              {{ (hist | from_json | default([])) | length }}
+            {% else %}
+              0
+            {% endif %}
+          rooms_array: >
+            {% set hist = states('input_text.room_history_sorted') %}
+            {% if hist not in ['unknown', '', 'unavailable'] %}
+              {{ hist | from_json | default([]) }}
+            {% else %}
+              []
+            {% endif %}
+
+# ----------------------------------------------------------------------------
+# SCHRITT 4: Verwendung in Lovelace UI
+# ----------------------------------------------------------------------------
+
+# OPTION A: Button Card mit auto-entities
+# =========================================
+# Installiere: HACS → Frontend → auto-entities
+# Installiere: HACS → Frontend → button-card
+
+# Beispiel Lovelace-Karte:
+# ------------------------
+# type: custom:auto-entities
+# card:
+#   type: grid
+#   columns: 2
+#   square: false
+# filter:
+#   template: |
+#     {% set hist = states('input_text.room_history_sorted') %}
+#     {% if hist not in ['unknown', '', 'unavailable'] %}
+#       {% set rooms = hist | from_json | default([]) %}
+#       {% set ns = namespace(cards=[]) %}
+#       {% for room in rooms %}
+#         {% set room_entities = area_entities(room) | select('match', 'light.') | list %}
+#         {% if room_entities | length > 0 %}
+#           {% set ns.cards = ns.cards + [{
+#             'type': 'custom:button-card',
+#             'entity': room_entities[0],
+#             'name': room,
+#             'show_state': true,
+#             'tap_action': {
+#               'action': 'navigate',
+#               'navigation_path': '/lovelace/' ~ room | lower | replace(' ', '-')
+#             },
+#             'styles': {
+#               'card': [
+#                 'background': 'var(--primary-color)' if loop.index == 1 else 'var(--card-background-color)'
+#               ]
+#             }
+#           }] %}
+#         {% endif %}
+#       {% endfor %}
+#       {{ ns.cards }}
+#     {% else %}
+#       []
+#     {% endif %}
+
+# OPTION B: Markdown Card (Einfach, ohne Custom Cards)
+# ====================================================
+# type: markdown
+# content: |
+#   {% set hist = states('input_text.room_history_sorted') %}
+#   {% if hist not in ['unknown', '', 'unavailable'] %}
+#     {% set rooms = hist | from_json | default([]) %}
+#     ## 📍 Deine Räume (nach Besuchsreihenfolge)
+#     {% for room in rooms %}
+#       {{ loop.index }}. **{{ room }}** {% if loop.index == 1 %}← *Du bist hier*{% endif %}
+#     {% endfor %}
+#   {% else %}
+#     Keine Raumhistorie verfügbar.
+#   {% endif %}
+
+# OPTION C: Script für Navigation zum aktuellen Raum
+# ==================================================
+script:
+  navigate_to_current_room:
+    alias: "Navigate to Current Room"
+    sequence:
+      - variables:
+          hist: >
+            {% set h = states('input_text.room_history_sorted') %}
+            {% if h not in ['unknown', '', 'unavailable'] %}
+              {{ h | from_json | default([]) }}
+            {% else %}
+              []
+            {% endif %}
+          current_room: >
+            {% if hist | length > 0 %}
+              {{ hist[0] }}
+            {% else %}
+              ''
+            {% endif %}
+      
+      - condition: template
+        value_template: "{{ current_room != '' }}"
+      
+      - service: browser_mod.navigate
+        data:
+          path: "/lovelace/{{ current_room | lower | replace(' ', '-') }}"
+
+# ----------------------------------------------------------------------------
+# SCHRITT 5: Erweiterte UI mit Mushroom Cards (Empfohlen!)
+# ----------------------------------------------------------------------------
+
+# Installiere über HACS:
+# - mushroom (Mushroom Cards)
+# - card-mod (für Styling)
+
+# Lovelace YAML:
+# --------------
+# type: vertical-stack
+# cards:
+#   # Header mit aktuellem Raum
+#   - type: custom:mushroom-title-card
+#     title: |
+#       {% set hist = states('input_text.room_history_sorted') %}
+#       {% if hist not in ['unknown', '', 'unavailable'] %}
+#         {% set rooms = hist | from_json | default([]) %}
+#         {% if rooms | length > 0 %}
+#           📍 {{ rooms[0] }}
+#         {% else %}
+#           Kein Raum aktiv
+#         {% endif %}
+#       {% else %}
+#         Kein Raum aktiv
+#       {% endif %}
+#     subtitle: Du bist hier
+#   
+#   # Raum-Chips (Horizontale Buttons)
+#   - type: custom:mushroom-chips-card
+#     chips:
+#       # Chip 1 (Aktueller Raum)
+#       - type: template
+#         content: |
+#           {% set hist = states('input_text.room_history_sorted') %}
+#           {% if hist not in ['unknown', '', 'unavailable'] %}
+#             {% set rooms = hist | from_json | default([]) %}
+#             {{ rooms[0] if rooms | length > 0 else '-' }}
+#           {% else %}
+#             -
+#           {% endif %}
+#         icon: mdi:map-marker
+#         tap_action:
+#           action: navigate
+#           navigation_path: |
+#             {% set hist = states('input_text.room_history_sorted') %}
+#             {% if hist not in ['unknown', '', 'unavailable'] %}
+#               {% set rooms = hist | from_json | default([]) %}
+#               /lovelace/{{ rooms[0] | lower | replace(' ', '-') if rooms | length > 0 else 'home' }}
+#             {% else %}
+#               /lovelace/home
+#             {% endif %}
+#         card_mod:
+#           style: |
+#             ha-card {
+#               background: var(--primary-color);
+#             }
+#       
+#       # Chip 2 (Vorheriger Raum)
+#       - type: template
+#         content: |
+#           {% set hist = states('input_text.room_history_sorted') %}
+#           {% if hist not in ['unknown', '', 'unavailable'] %}
+#             {% set rooms = hist | from_json | default([]) %}
+#             {{ rooms[1] if rooms | length > 1 else '-' }}
+#           {% else %}
+#             -
+#           {% endif %}
+#         icon: mdi:history
+#         tap_action:
+#           action: navigate
+#           navigation_path: |
+#             {% set hist = states('input_text.room_history_sorted') %}
+#             {% if hist not in ['unknown', '', 'unavailable'] %}
+#               {% set rooms = hist | from_json | default([]) %}
+#               /lovelace/{{ rooms[1] | lower | replace(' ', '-') if rooms | length > 1 else 'home' }}
+#             {% else %}
+#               /lovelace/home
+#             {% endif %}
+
+# ----------------------------------------------------------------------------
+# BONUS: Blueprint für wiederverwendbare Lösung
+# ----------------------------------------------------------------------------
+
+# Speichere als: track_room_presence.yaml
+# Import in Home Assistant über Blueprint-Import
+
