@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.23)
+  name: Heizungssteuerung (V4.24)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
     
@@ -92,7 +92,7 @@ blueprint:
         time: {}
 
 # Wir verwenden den 'restart' Modus für saubere Ausführung
-mode: restart
+mode: queued
 max_exceeded: silent
 
 # Trigger-Variablen: Ermöglicht Template-Triggern den Zugriff auf Blueprint-Inputs
@@ -101,6 +101,8 @@ trigger_variables:
   scheduler_enabled: !input scheduler_enabled
   schedule_entity: !input schedule_entity
   scheduler_toggle: !input scheduler_toggle
+  # Für Template-basierte Zeit-Trigger
+  nightly_eco_time: !input nightly_eco_time
 
 variables:
   # Eingänge für einfacheren Zugriff
@@ -157,7 +159,14 @@ trigger:
     id: "scheduler_toggle_change"
   - platform: time
     at: !input nightly_eco_time
-    id: "nightly_eco_time"
+    id: "nightly_eco_time_trigger"
+  # Redundanter Template-Trigger: feuert exakt zur täglichen Uhrzeit (lokal)
+  # Hinweis: now() wird minütlich aktualisiert; Vergleich inkl. Sekunden ist ok,
+  # da das Update zum Sekundenwechsel :00 erfolgt.
+  - platform: template
+    value_template: >-
+      {{ now().strftime('%H:%M:%S') == (nightly_eco_time | string) }}
+    id: "nightly_eco_time_trigger"
 
 action:
   # Validierung: Scheduler aktiviert aber keine Schedule Entity gesetzt
@@ -250,7 +259,7 @@ action:
       # --- NÄCHTLICHE ECO-UMSCHALTUNG UND RESET DER MANUELLEN EINGRIFFE ---
       - conditions:
           - condition: trigger
-            id: "nightly_eco_time"
+            id: "nightly_eco_time_trigger"
         sequence:
           # Smart Temperature Setting für nächtliche Umschaltung
           - variables:
