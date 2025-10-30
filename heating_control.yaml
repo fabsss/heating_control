@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.25)
+  name: Heizungssteuerung (V4.26)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
     
@@ -226,7 +226,7 @@ action:
         sequence:
           # Smart Temperature Setting: Sicherstellen dass Thermostat Temperatur akzeptiert
           - variables:
-              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') }}"
+              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') or states(heating_entities) }}"
               need_temp_restore: "{{ current_hvac_mode == 'off' }}"
           - if:
               - condition: template
@@ -263,7 +263,7 @@ action:
         sequence:
           # Smart Temperature Setting für nächtliche Umschaltung
           - variables:
-              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') }}"
+              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') or states(heating_entities) }}"
               need_temp_restore: "{{ current_hvac_mode == 'off' }}"
           - if:
               - condition: template
@@ -346,7 +346,7 @@ action:
         then:
           # Smart Temperature Setting für Scheduler-Aktivierung (Komfort-Temperatur)
           - variables:
-              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') }}"
+              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') or states(heating_entities) }}"
               need_temp_restore: "{{ current_hvac_mode == 'off' }}"
           - if:
               - condition: template
@@ -396,7 +396,7 @@ action:
         then:
           # Smart Temperature Setting für Scheduler-Deaktivierung (ECO-Temperatur)
           - variables:
-              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') }}"
+              current_hvac_mode: "{{ state_attr(heating_entities, 'hvac_mode') or states(heating_entities) }}"
               need_temp_restore: "{{ current_hvac_mode == 'off' }}"
           - if:
               - condition: template
