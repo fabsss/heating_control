@@ -2,7 +2,7 @@
 
 Ein leistungsstarkes und flexibles Blueprint zur automatischen Steuerung deiner Heizung basierend auf Anwesenheitsstatus, Zeitplänen und intelligenter Priorisierung.
 
-[![Version](https://img.shields.io/badge/Version-4.21-blue.svg)](https://github.com/fabsss/heating_control)
+[![Version](https://img.shields.io/badge/Version-4.27-blue.svg)](https://github.com/fabsss/heating_control)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-green.svg)](https://www.home-assistant.io/)
 [![Blueprint](https://img.shields.io/badge/Blueprint-Import-orange.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/fabsss/heating_control/blob/main/heating_control.yaml)
 
@@ -92,8 +92,12 @@ input_select:
 
 | Eingabe | Standard | Beschreibung |
 |---------|----------|--------------|
-| **Eco-Temperatur** | 17°C | Temperatur für Away, Sleep, nächtlicher Reset |
-| **Komfort-Temperatur** | 21°C | Temperatur wenn Scheduler aktiv |
+| **Eco-Preset** | kein Preset | (Optional) Preset der Climate-Entität (z.B. Better Thermostat) für Eco – hat Vorrang vor der Temperatur |
+| **Komfort-Preset** | kein Preset | (Optional) Preset der Climate-Entität für Komfort – hat Vorrang vor der Temperatur |
+| **Eco-Temperatur** | 17°C | Fallback-Temperatur für Away, Sleep, nächtlicher Reset (wenn kein Preset gewählt/verfügbar) |
+| **Komfort-Temperatur** | 21°C | Fallback-Temperatur wenn Scheduler aktiv (wenn kein Preset gewählt/verfügbar) |
+
+**Presets:** Die Dropdown-Liste bietet gängige Namen (`eco`, `comfort`, `away`, `sleep`, …); eigene Namen können frei eingegeben werden (exakt wie im Attribut `preset_modes` der Entität). Bietet die Entität das Preset nicht an, fällt das Blueprint automatisch auf die feste Temperatur zurück.
 
 ### Scheduler-Optionen (Optional)
 
@@ -130,7 +134,7 @@ Die Automation folgt einer **klaren Prioritätshierarchie**:
 
 ### Priorität 2: 🚪 Verlassen der Wohnung
 **Bedingungen:**
-- Status wechselt von `Home` oder `Leaving` zu `Away`
+- Status wechselt von einem beliebigen Zustand (außer `Away`, `Vacation`, `unavailable`, `unknown`) zu `Away`
 
 **Aktion:** Thermostat auf HVAC-Modus `off` setzen
 
@@ -172,6 +176,8 @@ Die Automation folgt einer **klaren Prioritätshierarchie**:
 - Schedule ist aktiv (`schedule_entity = on`)
 - Office-Override ist nicht aktiv oder nicht konfiguriert
 - Trigger war: `schedule_change`, `scheduler_toggle_change` oder `heating_toggle`
+
+**Während `Sleep`** werden Scheduler-Wechsel nicht angewendet (Eco bleibt). Beim Verlassen von `Sleep` (→ `Home`, `Guest Mode`, `Coming Home`) wird Komfort nachgeholt, falls der Schedule dann aktiv ist; andernfalls bleibt Eco.
 
 **Eco-Temperatur aktivieren wenn:**
 - Scheduler ist enabled
@@ -215,7 +221,7 @@ Dies garantiert, dass Temperaturänderungen immer funktionieren!
 2. **Automation anlegen**:
    - Gehe zu **Einstellungen → Automationen & Szenen**
    - **Automation erstellen** → **Blueprint verwenden**
-   - Wähle **Heizungssteuerung (V4.21)**
+   - Wähle **Heizungssteuerung (V4.27)**
 3. **Konfigurieren**:
    - Heizkörper auswählen
    - Anwesenheitsstatus-Helper zuweisen
@@ -286,7 +292,16 @@ Nächtliche Eco-Zeit: 01:00:00
 
 ## 🔄 Updates & Changelog
 
-### Version 4.21 (Aktuell)
+### Version 4.27 (Aktuell)
+- ✅ Presets der Climate-Entität (z.B. Better Thermostat) für Eco und Komfort, mit Fallback auf die feste Temperatur
+- ✅ Kein kurzes Einschalten mehr nötig, wenn ein Preset gesetzt wird
+- ✅ Verlassen-Erkennung: Wechsel aus beliebigen Zuständen nach `Away` schaltet die Heizung aus
+- ✅ Rückkehr aus `Vacation` schaltet die Heizung wieder ein
+- ✅ Scheduler pausiert während `Sleep` und wird beim Verlassen von `Sleep` nachgeholt
+- ✅ Nächtliche Umschaltung: `Coming Home` wird nicht mehr ausgeschaltet
+- ✅ `wait_template` statt fester Wartezeit; `continue_on_error` bei Thermostat-Aufrufen
+
+### Version 4.21
 - ✅ Template-Trigger mit `trigger_variables` für zuverlässiges Triggern
 - ✅ Smart Temperature Setting für Thermostaten
 - ✅ Vollständige Unterstützung optionaler Entities mit `default: []`
