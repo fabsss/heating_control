@@ -49,6 +49,7 @@ Grundprinzip des Gesamtsystems: *Ein LLM schlägt vor, die Daten prüfen, du gib
 | Aufnahmeverfahren | Rohstrom von `state_changed` statt nur Events; manuelle Eingriffe werden in der Analyse abgeleitet |
 | Schreibintervall | Gebündelt alle **30 Sekunden** und beim ordentlichen Beenden; konfigurierbar |
 | Erweiterbarkeit | Ein einziges Home-Assistant-Label `KI_DB_Sync` für alle Anwendungen, plus Standardregeln je Gerätetyp |
+| Quelle der Entitäten | Ausschließlich das Label `KI_DB_Sync`; `collector.yaml` enthält nur Regeln, keine Entitäten |
 | Anwendungsneutralität | Jede Entität hat eine `domain` (`heating`, später `lighting`); Namen von Datei, Tabellen und Views sind nicht heizungsspezifisch |
 | Historische Daten | Auslesen der `home-assistant_v2.db` aus Proxmox-Backup-Server-Snapshots, kein Wiederherstellen |
 | Ablage | Verzeichnis `ai/` in diesem Repository |
@@ -75,7 +76,9 @@ Collector und Backfill teilen sich dieselbe Umwandlungslogik (Filter, Speicherre
 
 ## 5. Erfasste Entitäten
 
-### 5.1 Live-Liste (Startbestand)
+### 5.1 Startbestand (wird per Label vergeben)
+
+**Einzige Quelle** dafür, welche Entitäten aufgezeichnet werden, ist das Label `KI_DB_Sync` in Home Assistant. Es gibt keine zweite Liste in einer Konfigurationsdatei. Die folgende Tabelle ist der Satz an Entitäten, der einmalig bei der Einrichtung mit dem Label versehen wird (siehe 5.2).
 
 | Gruppe | Entitäten | Speicherregel |
 |--------|-----------|---------------|
@@ -94,12 +97,14 @@ Das Schlafzimmer hat keinen Zeitplan. Das ist korrekt und kein Fehler. Für Sven
 
 ### 5.2 Aufnahme neuer Entitäten
 
-- Der Collector liest beim Start und danach in regelmäßigen Abständen (alle 10 Minuten) die Entity Registry und nimmt jede Entität mit dem Label `KI_DB_Sync` auf. Der Raum kommt aus dem zugeordneten Home-Assistant-Bereich.
-- Die `domain` der Anwendung kommt aus einer Zuordnung in `collector.yaml` (Standard: Entitätsdomäne `climate` → `heating`, später `light` → `lighting`). Entitäten ohne eindeutige Zuordnung, etwa Personen oder Anwesenheitssensoren, erhalten `domain = shared` und gelten für alle Anwendungen.
-- Speicherregeln folgen Standardwerten je Domäne und `device_class` (Temperatur 0,5 °C, Luftfeuchte 5 %, Binärsensoren jede Änderung). Abweichungen stehen in `collector.yaml`.
+- **Mitgliedschaft = Label.** Der Collector liest beim Start und danach in regelmäßigen Abständen (alle 10 Minuten) die Entity Registry und nimmt jede Entität mit dem Label `KI_DB_Sync` auf. Das Label hängt an der Registry-Kennung und überlebt Umbenennungen von Entitäten.
+- **Raum:** kommt aus dem in Home Assistant zugeordneten Bereich. Raumgebundene Entitäten (Thermostate, Präsenz, Fenster, Umgebungssensoren) ohne Bereich werden aufgenommen, der Collector meldet aber eine Warnung, weil die Analyse sie keinem Raum zuordnen kann.
+- **`domain`:** kommt aus einer Zuordnung in `collector.yaml` (Standard: Entitätsdomäne `climate` → `heating`, später `light` → `lighting`). Entitäten ohne eindeutige Zuordnung, etwa Personen oder Anwesenheitssensoren, erhalten `domain = shared` und gelten für alle Anwendungen.
+- **`collector.yaml` enthält nur Regeln, keine Entitäten:** Standardwerte je Domäne und `device_class` (Temperatur 0,5 °C, Luftfeuchte 5 %, Binärsensoren jede Änderung), die Attribut-Whitelist je `kind` und Ausnahmen je `entity_id` (z. B. Entprellung für den Handy-Raumsensor). Eine Ausnahme für eine Entität ohne Label hat keine Wirkung.
+- **Einschränkung von Labels:** Nur Entitäten mit einer eindeutigen Kennung in der Entity Registry können ein Label tragen. Entitäten ohne sie (z. B. manche YAML-Template-Sensoren) lassen sich nicht aufnehmen. Das wird bei der Einrichtung geprüft.
 - Wird eine Entität neu erkannt, holt der Collector ihren Verlauf aus der History-API von Home Assistant nach (höchstens 180 Tage). Älteres liefert der Backfill.
 - `entities.tracked_since` hält fest, ab wann Daten vorliegen. Die Analyse behandelt fehlende Daten davor als unbekannt, nicht als „aus“.
-- Entitäten aus 5.1 werden beim ersten Start ebenfalls über `collector.yaml` angelegt, damit der Startbestand nicht von Labels abhängt.
+- **Einrichtung des Startbestands:** Das Label `KI_DB_Sync` wird einmalig angelegt und den Entitäten aus 5.1 zugewiesen. Das kann in der Home-Assistant-Oberfläche oder über die MCP-Werkzeuge geschehen. Fehlt das Label oder trägt keine Entität es, beendet sich der Collector mit einer klaren Fehlermeldung, statt still nichts aufzuzeichnen.
 
 ### 5.3 Entfernen einer Entität
 
@@ -107,7 +112,7 @@ Das Schlafzimmer hat keinen Zeitplan. Das ist korrekt und kein Fehler. Für Sven
 - **Bereits aufgezeichnete Daten bleiben erhalten.** Es wird nichts automatisch gelöscht, weil ein versehentlich entferntes Label sonst Monate an Verlauf vernichten würde. Die Analyse behandelt die Zeit nach `tracked_until` als unbekannt.
 - **Label wieder gesetzt:** `active` wird wieder 1, `tracked_until` wird geleert, und die Lücke dazwischen wird aus der History-API nachgeholt, soweit sie noch im Recorder liegt (höchstens 180 Tage).
 - **Endgültig löschen** geht nur über einen ausdrücklichen Befehl, z. B. `purge-entity <entity_id>`, der die Zeilenzahl nennt und eine Bestätigung verlangt.
-- **Entitäten aus `collector.yaml`** (Startbestand) hängen nicht am Label. Das Entfernen des Labels ändert bei ihnen nichts. Sie werden entfernt, indem man sie aus der Datei streicht; dann gilt dieselbe Regel (`active = 0`, Daten bleiben).
+- **Alle Entitäten gelten gleich.** Es gibt keine Sonderfälle für Entitäten des Startbestands.
 
 ## 6. Datenmodell
 
@@ -195,14 +200,14 @@ Als Lernsignal gilt nur die Klasse *manuell*. Eingriffe am Thermostat selbst sin
 - Verbindet sich per WebSocket, abonniert `state_changed`, filtert im Code auf die aktive Entitätenliste und wendet Speicherregeln und Entprellung an.
 - Schreibt gepuffert alle **30 Sekunden** und beim ordentlichen Beenden (SIGTERM) in SQLite (eine Transaktion pro Schreibvorgang).
 - **Wiederverbindung:** Exponentieller Backoff. Nach einem Abbruch holt der Collector die Lücke seit dem letzten gespeicherten Zeitstempel je Entität über die History-API nach.
-- **Konfiguration:** `collector.yaml` (URL, Label-Name, Standardregeln, Ausnahmen, Schreibintervall); das Token kommt aus der Umgebungsvariable `HA_TOKEN`.
+- **Konfiguration:** `collector.yaml` (URL, Label-Name, Standardregeln, Ausnahmen je Entität, Schreibintervall); sie enthält keine Entitätenliste. Das Token kommt aus der Umgebungsvariable `HA_TOKEN`.
 - **Betrieb:** Docker-Healthcheck prüft, dass in den letzten 10 Minuten eine Nachricht von Home Assistant ankam.
 - **Nächtliche Kopie** der SQLite-Datei (SQLite-Online-Backup) auf ein zweites Ziel; die Datei lässt sich vom Proxmox Backup Server mitsichern.
 
 ### 7.2 Backfill (Kommandozeile)
 
 ```
-backfill --db <home-assistant_v2.db> [--from <ts>] [--to <ts>] [--config collector.yaml]
+backfill --db <home-assistant_v2.db> [--from <ts>] [--to <ts>] [--config collector.yaml] [--history-map history_map.yaml]
 ```
 
 - Öffnet die Home-Assistant-Datenbank **nur lesend**.
@@ -210,7 +215,8 @@ backfill --db <home-assistant_v2.db> [--from <ts>] [--to <ts>] [--config collect
 - Wendet dieselben Filter-, Whitelist- und Speicherregeln wie der Collector an.
 - Schreibt mit `source = 'backfill:<dateiname>'`. Wegen `UNIQUE` ist das mehrfache Einspielen und das Einspielen überlappender Zeiträume unschädlich.
 - Protokolliert jeden Lauf in `ingest_runs`.
-- Frühere direkte Thermostate (`climate.trv_*`) werden über `room_map` mit Gültigkeitszeitraum demselben Raum zugeordnet wie die heutigen Better-Thermostat-Entitäten.
+- **Welche Entitäten** eingespielt werden, bestimmt dasselbe Label wie beim Collector (Entitäten mit `KI_DB_Sync`).
+- **Historische Zuordnung:** Frühere direkte Thermostate (`climate.trv_*`) und umbenannte oder entfernte Entitäten tragen kein Label mehr oder nie eines. Ihre Zuordnung zu Räumen mit Gültigkeitszeitraum steht deshalb in einer eigenen Datei `history_map.yaml`, die **nur vom Backfill** gelesen wird und keine Auswirkung auf die Live-Aufzeichnung hat. Das ist keine zweite Quelle für die Mitgliedschaft, sondern eine Übersetzungstabelle für Vergangenes.
 
 ## 8. Alte Daten aus den Backups holen
 
@@ -231,7 +237,9 @@ Die Backups enthalten Zugangsdaten und Tokens. Sie bleiben lokal und werden nich
 | Ungültiges Token | Start bricht mit klarer Meldung ab |
 | Entität verschwindet aus Home Assistant | Wird weiter geführt, es kommen keine Daten mehr; `tracked_since` bleibt erhalten |
 | Backfill-Datei mit unbekanntem Schema | Abbruch mit Hinweis auf die Schemaversion, es wird nichts halb geschrieben (eine Transaktion pro Lauf) |
-| Umbenannte Entität in alten Daten | Wird über `room_map` und einen optionalen Alias in `collector.yaml` zugeordnet |
+| Umbenannte Entität in alten Daten | Wird über `history_map.yaml` (nur Backfill) einem Raum und einer aktuellen Entität zugeordnet |
+| Label fehlt oder trägt keine Entität | Collector beendet sich mit klarer Fehlermeldung |
+| Raumgebundene Entität ohne Bereich | Wird aufgenommen, Warnung im Log |
 
 ## 10. Tests
 
@@ -275,7 +283,8 @@ Nicht festgelegt und bewusst offen: welche Lichtentitäten aufgenommen werden, w
 ai/
   collector/            # Python-Paket: live-Collector, Backfill, gemeinsame Umwandlung
   config/
-    collector.yaml      # Entitäten, Standardregeln, Ausnahmen
+    collector.yaml      # Regeln (keine Entitätenliste): Standardwerte, Whitelist je kind, Ausnahmen
+    history_map.yaml    # nur Backfill: alte Entitäten -> Raum, mit Gültigkeitszeitraum
   sql/
     schema.sql          # Tabellen, Indizes, View manual_actions
   tests/
