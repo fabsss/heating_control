@@ -114,7 +114,9 @@ class Collector:
         now = self._now()
         floor = now - timedelta(days=HISTORY_DAYS)
         total = 0
-        for entity_id in sorted(self.pipeline.rules):
+        entity_ids = sorted(self.pipeline.rules)
+        for number, entity_id in enumerate(entity_ids, start=1):
+            log.info("Lückenabgleich %d/%d: %s", number, len(entity_ids), entity_id)
             start = max(self.db.last_ts(entity_id) or floor, floor)
             result = await client.command(
                 "history/history_during_period",
@@ -130,7 +132,8 @@ class Collector:
             for change in changes:
                 self.pipeline.handle(change, source="gap:history_api")
             total += len(changes)
-        self.pipeline.flush()
+            self.pipeline.flush()
+        log.info("Lückenabgleich abgeschlossen: %d Zustände aus der History-API", total)
         return total
 
     # --- Sitzung ---------------------------------------------------------------------

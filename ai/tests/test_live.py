@@ -170,6 +170,31 @@ async def test_gap_fill_replays_history_with_gap_source(cfg, db, fake_hass):
     assert seen["include_start_time_state"] is True
 
 
+async def test_gap_fill_logs_progress_and_writes_after_each_entity(cfg, db, fake_hass, caplog):
+    prepare(fake_hass, [entity_entry("input_boolean.a"), entity_entry("input_boolean.b")])
+    seen_counts: list[int] = []
+
+    def history(message):
+        seen_counts.append(db.conn.execute("SELECT COUNT(*) FROM state_changes").fetchone()[0])
+        entity_id = message["entity_ids"][0]
+        return {entity_id: [{"s": "on", "a": {}, "lu": 1767261600.0}]}
+
+    fake_hass.responses[HISTORY] = history
+    client = HassClient(fake_hass.url, "secret")
+    await client.connect()
+    collector = make_collector(cfg, db, fake_hass)
+    try:
+        await collector.sync_registry(client)
+        with caplog.at_level("INFO", logger="collector"):
+            await collector.gap_fill(client)
+    finally:
+        await client.close()
+    assert seen_counts == [0, 1]       # Zeilen der ersten Entität sind schon geschrieben
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("Lückenabgleich 1/2" in m for m in messages)
+    assert any("Lückenabgleich 2/2" in m for m in messages)
+
+
 # --- Sitzung ---------------------------------------------------------------------
 
 async def test_run_session_records_events_and_flushes_on_close(cfg, db, fake_hass):
