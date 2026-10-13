@@ -5,4 +5,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY collector ./collector
 COPY sql ./sql
+COPY config ./config
 CMD ["python", "-m", "collector", "run"]

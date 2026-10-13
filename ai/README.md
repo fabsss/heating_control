@@ -14,7 +14,7 @@ docker compose exec collector python -m collector purge-entity sensor.beispiel
 
 ## Regeln
 
-`config/collector.yaml` enthält nur Regeln (Schwellen, Whitelist je Art, Ausnahmen je Entität), keine Entitäten.
+`config/collector.yaml` enthält nur Regeln (Schwellen, Whitelist je Art, Ausnahmen je Entität), keine Entitäten. Die Datei wird ins Image eingebaut; nach einer Änderung das Image neu bauen (`docker compose up -d --build`).
 
 ## Starten
 
@@ -40,7 +40,7 @@ Nach dem Start erscheint `Registry-Abgleich: N Entitäten mit Label KI_DB_Sync`.
 
 ```bash
 docker compose run --rm -v "$PWD/snapshots:/snapshots" collector \
-  python -m collector backfill --db /snapshots/april/home-assistant_v2.db --history-map /config/history_map.yaml
+  python -m collector backfill --db /snapshots/april/home-assistant_v2.db --history-map /app/config/history_map.yaml
 ```
 
 Mehrfaches Einspielen derselben oder überlappender Dateien ist unschädlich.

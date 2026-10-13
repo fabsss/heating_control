@@ -1,17 +1,18 @@
 services:
   collector:
     build: .
+    image: home-ai-collector
     container_name: home-ai-collector
     restart: unless-stopped
-    env_file: .env
     environment:
-      COLLECTOR_CONFIG: /config/collector.yaml
+      HA_TOKEN: ${HA_TOKEN:?HA_TOKEN fehlt}
+      HA_URL: ${HA_URL:?HA_URL fehlt}
+      COLLECTOR_CONFIG: /app/config/collector.yaml
       HEALTH_FILE: /tmp/collector.health
       TZ: Europe/Berlin
     volumes:
       - /mnt/data/nobackup/homeassistant/ai:/data
       - /mnt/data/backup/databases:/backup
-      - ./config:/config:ro
     healthcheck:
       test: ["CMD", "python", "-m", "collector.healthcheck"]
       interval: 60s
