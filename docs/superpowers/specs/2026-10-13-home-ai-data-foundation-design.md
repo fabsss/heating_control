@@ -81,7 +81,7 @@ Collector und Backfill teilen sich dieselbe Umwandlungslogik (Filter, Speicherre
 |--------|-----------|---------------|
 | Thermostate | `climate.better_thermostat_livingroom`, `_bedroom`, `_bathroom`, `_office` | siehe 6.2 |
 | Personen | `person.fabian`, `person.svenja` | jede Änderung |
-| Wohnung | `input_select.flat_occupation_state`, `input_button.sleep_mode`, `input_boolean.someone_in_bed`, `binary_sensor.sleep_state_helper`, `input_boolean.guest_mode`, `input_boolean.vacation`, `binary_sensor.office_day_template` | jede Änderung |
+| Wohnung | `input_select.flat_occupation_state`, `input_button.sleep_mode`, `input_boolean.someone_in_bed`, `binary_sensor.office_day_template` | jede Änderung |
 | Heizungsschalter | `input_boolean.heating_on_off`, `input_boolean.heating_automation`, `schedule.heating_schedule_livingroom`, `_bathroom`, `_office` | jede Änderung |
 | Anwesenheit | `binary_sensor.presence_office_presence`, `binary_sensor.presence_kitchen_presence`, `binary_sensor.front_door_contact` | jede Änderung |
 | Raum des Handys | `sensor.fabians_s22_presence_tracker_area_last_seen` | Raumwechsel erst nach 60 s Verweildauer |
@@ -101,6 +101,14 @@ Das Schlafzimmer hat keinen Zeitplan. Das ist korrekt und kein Fehler. Für Sven
 - `entities.tracked_since` hält fest, ab wann Daten vorliegen. Die Analyse behandelt fehlende Daten davor als unbekannt, nicht als „aus“.
 - Entitäten aus 5.1 werden beim ersten Start ebenfalls über `collector.yaml` angelegt, damit der Startbestand nicht von Labels abhängt.
 
+### 5.3 Entfernen einer Entität
+
+- **Label entfernt:** Die Entität wird beim nächsten Abgleich der Entity Registry (spätestens nach 10 Minuten) auf `active = 0` gesetzt und `tracked_until` erhält den Zeitpunkt. Ab dann kommen keine neuen Daten mehr hinzu.
+- **Bereits aufgezeichnete Daten bleiben erhalten.** Es wird nichts automatisch gelöscht, weil ein versehentlich entferntes Label sonst Monate an Verlauf vernichten würde. Die Analyse behandelt die Zeit nach `tracked_until` als unbekannt.
+- **Label wieder gesetzt:** `active` wird wieder 1, `tracked_until` wird geleert, und die Lücke dazwischen wird aus der History-API nachgeholt, soweit sie noch im Recorder liegt (höchstens 180 Tage).
+- **Endgültig löschen** geht nur über einen ausdrücklichen Befehl, z. B. `purge-entity <entity_id>`, der die Zeilenzahl nennt und eine Bestätigung verlangt.
+- **Entitäten aus `collector.yaml`** (Startbestand) hängen nicht am Label. Das Entfernen des Labels ändert bei ihnen nichts. Sie werden entfernt, indem man sie aus der Datei streicht; dann gilt dieselbe Regel (`active = 0`, Daten bleiben).
+
 ## 6. Datenmodell
 
 ### 6.1 Schema (SQLite, UTC)
@@ -115,7 +123,9 @@ entities(
   min_delta     REAL,                -- Schwelle für Zahlenwerte
   heartbeat_s   INTEGER,             -- spätestens nach dieser Zeit speichern
   debounce_s    INTEGER,             -- z. B. 60 für area_last_seen
-  tracked_since TEXT                 -- ISO-8601 UTC
+  tracked_since TEXT,                -- ISO-8601 UTC, ab hier liegen Daten vor
+  active        INTEGER NOT NULL DEFAULT 1,  -- 0 = wird nicht mehr aufgezeichnet
+  tracked_until TEXT                 -- ISO-8601 UTC, gesetzt wenn active = 0
 );
 
 room_map(
@@ -173,6 +183,8 @@ Die View ist anwendungsneutral und liefert pro Änderung die Spalten `ts_utc`, `
 | `context_user_id` gesetzt, `context_parent_id` leer | **manuell** (Mensch, direkt) |
 | `context_parent_id` gesetzt | Automation oder Better Thermostat |
 | `context_user_id` leer, `context_parent_id` leer | unbekannt (z. B. Eingriff am Gerät) |
+
+Änderungen durch die Heizungsautomatik werden **ebenfalls aufgezeichnet**, denn der Rohstrom speichert jede Änderung der überwachten Attribute, unabhängig vom Verursacher. Sie erscheinen in der Klasse *Automation oder Better Thermostat*. Das ist nötig, damit die Analyse jederzeit weiß, welches Preset oder welcher Sollwert gerade aktiv war, und eigene Änderungen der Automatik nicht mit manuellen Eingriffen verwechselt. Löst ein Mensch eine Automation indirekt aus (z. B. über `flat_occupation_state`), steht der Benutzer nicht am Thermostat, sondern am auslösenden Zustandswechsel. Die Auflösung dieser Kontextkette ist wie bei Szenen (Abschnitt 12) vorgesehen, aber in diesem Teilprojekt nicht umgesetzt.
 
 Als Lernsignal gilt nur die Klasse *manuell*. Eingriffe am Thermostat selbst sind laut Nutzer selten; sie werden deshalb nicht als manuell gewertet. Eine Heuristik dafür (Zeitabstand zu Automationsaktionen) ist bei Bedarf nachrüstbar.
 
