@@ -107,6 +107,7 @@ class Collector:
         self.pipeline.set_rules(rules)
         for user in await fetch_users(client):
             self.db.upsert_user(user.user_id, user.person_entity, user.name)
+        log.info("Registry-Abgleich: %d Entitäten mit Label %s", len(rules), self.cfg.label)
         self._first_sync = False
 
     async def gap_fill(self, client: HassClient) -> int:

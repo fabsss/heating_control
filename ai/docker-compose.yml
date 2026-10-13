@@ -1,0 +1,20 @@
+services:
+  collector:
+    build: .
+    container_name: home-ai-collector
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      COLLECTOR_CONFIG: /config/collector.yaml
+      HEALTH_FILE: /tmp/collector.health
+      TZ: Europe/Berlin
+    volumes:
+      - ./data:/data
+      - ./backup:/backup
+      - ./config:/config:ro
+    healthcheck:
+      test: ["CMD", "python", "-m", "collector.healthcheck"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
