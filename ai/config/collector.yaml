@@ -1,0 +1,63 @@
+# Regeln des Collectors. Diese Datei enthält KEINE Entitätenliste:
+# Welche Entitäten aufgezeichnet werden, bestimmt allein das Label in Home Assistant.
+home_assistant:
+  url: "ws://homeassistant.local:8123/api/websocket"   # per Umgebungsvariable HA_URL überschreibbar
+label: "KI_DB_Sync"
+database: "/data/home_ai.sqlite"                        # per Umgebungsvariable DB_PATH überschreibbar
+flush_interval_s: 30
+registry_sync_interval_s: 600
+timezone: "Europe/Berlin"
+backup:
+  path: "/backup/home_ai.sqlite"
+  time: "03:30"                                         # lokale Zeit
+
+# Anwendungsdomäne und Art je Home-Assistant-Domäne
+domain_defaults:
+  climate:       {kind: climate,  domain: heating}
+  schedule:      {kind: schedule, domain: heating}
+  light:         {kind: light,    domain: lighting}
+  scene:         {kind: scene,    domain: lighting}
+  person:        {kind: person,   domain: shared}
+  weather:       {kind: weather,  domain: shared}
+  input_select:  {kind: flat,     domain: shared}
+  input_boolean: {kind: flat,     domain: shared}
+  input_button:  {kind: button,   domain: shared}
+  binary_sensor: {kind: flat,     domain: shared}
+  sensor:        {kind: env,      domain: shared}
+
+# Art je device_class (nur sensor und binary_sensor)
+device_class_kinds:
+  occupancy: presence
+  presence: presence
+  motion: presence
+  window: contact
+  door: contact
+  opening: contact
+  garage_door: contact
+
+# Standard: jede Änderung des Zustands wird gespeichert
+default_policy: {}
+
+# Speicherregeln je kind
+policies:
+  climate:
+    attrs: [temperature, preset_mode, hvac_action, current_temperature, current_humidity, window_open]
+    change_attrs: [temperature, preset_mode, window_open]
+    delta_attrs: {current_temperature: 0.5}
+  weather:
+    attrs: [temperature, humidity, wind_speed]
+    delta_attrs: {temperature: 0.5, humidity: 5, wind_speed: 5}
+    heartbeat_s: 1800
+
+# Speicherregeln je device_class (überschreiben die je kind)
+device_class_policies:
+  temperature: {numeric_state_delta: 0.5, heartbeat_s: 1800}
+  humidity: {numeric_state_delta: 5, heartbeat_s: 1800}
+
+# Ausnahmen je Entität; wirken nur, wenn die Entität das Label trägt
+exceptions:
+  input_boolean.heating_on_off: {domain: heating}
+  input_boolean.heating_automation: {domain: heating}
+  sensor.fabians_s22_presence_tracker_area_last_seen: {kind: presence, debounce_s: 60}
+  binary_sensor.windows_livingroom_and_door: {kind: contact}
+  binary_sensor.windows_bedroom: {kind: contact}
