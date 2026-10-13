@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.27)
+  name: Heizungssteuerung (V4.28)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
     
@@ -262,10 +262,10 @@ action:
             - "Scheduler aktivieren" ist auf TRUE gesetzt oder ein "Scheduler Ein/Aus Toggle" ist gewählt
             - Aber "Zeitplan" Entity ist nicht konfiguriert
             
+            Der Scheduler wird ohne Zeitplan nicht ausgewertet, die übrige Steuerung läuft weiter.
             Bitte korrigieren Sie die Automation-Konfiguration!
           notification_id: "heating_control_config_error_{{ this.entity_id | replace('.', '_') }}"
-      - stop: "Konfigurationsfehler: Scheduler aktiviert aber keine Schedule Entity"
-      
+
   # Hinweis, wenn ein gewähltes Preset von der Entität nicht angeboten wird (Fallback auf Temperatur)
   - if:
       - condition: template

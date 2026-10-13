@@ -2,7 +2,7 @@
 
 Ein leistungsstarkes und flexibles Blueprint zur automatischen Steuerung deiner Heizung basierend auf Anwesenheitsstatus, Zeitplänen und intelligenter Priorisierung.
 
-[![Version](https://img.shields.io/badge/Version-4.27-blue.svg)](https://github.com/fabsss/heating_control)
+[![Version](https://img.shields.io/badge/Version-4.28-blue.svg)](https://github.com/fabsss/heating_control)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-green.svg)](https://www.home-assistant.io/)
 [![Blueprint](https://img.shields.io/badge/Blueprint-Import-orange.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/fabsss/heating_control/blob/main/heating_control.yaml)
 
@@ -221,7 +221,7 @@ Dies garantiert, dass Temperaturänderungen immer funktionieren!
 2. **Automation anlegen**:
    - Gehe zu **Einstellungen → Automationen & Szenen**
    - **Automation erstellen** → **Blueprint verwenden**
-   - Wähle **Heizungssteuerung (V4.27)**
+   - Wähle **Heizungssteuerung (V4.28)**
 3. **Konfigurieren**:
    - Heizkörper auswählen
    - Anwesenheitsstatus-Helper zuweisen
@@ -281,7 +281,7 @@ Nächtliche Eco-Zeit: 01:00:00
 
 **Lösung:** 
 - Wenn "Scheduler aktivieren" = `true`, muss eine Schedule-Entity gewählt werden
-- Die Automation zeigt eine persistente Benachrichtigung bei Fehlkonfiguration
+- Die Automation zeigt eine persistente Benachrichtigung bei Fehlkonfiguration und läuft danach ohne Scheduler weiter
 
 ### Template-Fehler
 **Problem:** `TypeError: unhashable type: 'list'`
@@ -292,7 +292,10 @@ Nächtliche Eco-Zeit: 01:00:00
 
 ## 🔄 Updates & Changelog
 
-### Version 4.27 (Aktuell)
+### Version 4.28 (Aktuell)
+- 🐛 Konfigurationsfehler "Scheduler ohne Zeitplan" bricht die Automation nicht mehr ab, sondern meldet nur noch (zuvor wurde z.B. `Away` nicht mehr verarbeitet)
+
+### Version 4.27
 - ✅ Presets der Climate-Entität (z.B. Better Thermostat) für Eco und Komfort, mit Fallback auf die feste Temperatur
 - ✅ Kein kurzes Einschalten mehr nötig, wenn ein Preset gesetzt wird
 - ✅ Verlassen-Erkennung: Wechsel aus beliebigen Zuständen nach `Away` schaltet die Heizung aus
