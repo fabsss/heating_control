@@ -215,7 +215,7 @@ backfill --db <home-assistant_v2.db> [--from <ts>] [--to <ts>] [--config collect
 - Wendet dieselben Filter-, Whitelist- und Speicherregeln wie der Collector an.
 - Schreibt mit `source = 'backfill:<dateiname>'`. Wegen `UNIQUE` ist das mehrfache Einspielen und das Einspielen überlappender Zeiträume unschädlich.
 - Protokolliert jeden Lauf in `ingest_runs`.
-- **Welche Entitäten** eingespielt werden, bestimmt dasselbe Label wie beim Collector (Entitäten mit `KI_DB_Sync`).
+- **Welche Entitäten** eingespielt werden: alle mit dem Label `KI_DB_Sync` (wie beim Collector) plus die Einträge der `history_map.yaml`. Letztere betreffen nur Vergangenes (z. B. frühere `climate.trv_*`), werden als inaktiv geführt (`active = 0`, `tracked_until` = letzter importierter Zeitstempel) und beeinflussen die Live-Aufzeichnung nicht.
 - **Historische Zuordnung:** Frühere direkte Thermostate (`climate.trv_*`) und umbenannte oder entfernte Entitäten tragen kein Label mehr oder nie eines. Ihre Zuordnung zu Räumen mit Gültigkeitszeitraum steht deshalb in einer eigenen Datei `history_map.yaml`, die **nur vom Backfill** gelesen wird und keine Auswirkung auf die Live-Aufzeichnung hat. Das ist keine zweite Quelle für die Mitgliedschaft, sondern eine Übersetzungstabelle für Vergangenes.
 
 ## 8. Alte Daten aus den Backups holen
