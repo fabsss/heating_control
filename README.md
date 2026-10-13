@@ -97,7 +97,7 @@ input_select:
 | **Eco-Temperatur** | 17°C | Fallback-Temperatur für Away, Sleep, nächtlicher Reset (wenn kein Preset gewählt/verfügbar) |
 | **Komfort-Temperatur** | 21°C | Fallback-Temperatur wenn Scheduler aktiv (wenn kein Preset gewählt/verfügbar) |
 
-**Presets:** Die Dropdown-Liste bietet gängige Namen (`eco`, `comfort`, `away`, `sleep`, …); eigene Namen können frei eingegeben werden (exakt wie im Attribut `preset_modes` der Entität). Bietet die Entität das Preset nicht an, fällt das Blueprint automatisch auf die feste Temperatur zurück.
+**Presets:** Die Dropdown-Liste bietet gängige Namen (`eco`, `comfort`, `away`, `sleep`, …); eigene Namen können frei eingegeben werden (exakt wie im Attribut `preset_modes` der Entität). Groß-/Kleinschreibung spielt keine Rolle; verwendet wird der echte Name aus `preset_modes`. Bietet die Entität das Preset nicht an, fällt das Blueprint auf die feste Temperatur zurück und zeigt eine persistente Benachrichtigung mit den verfügbaren Presets an.
 
 ### Scheduler-Optionen (Optional)
 

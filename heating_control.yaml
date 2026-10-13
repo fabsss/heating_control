@@ -41,13 +41,20 @@ blueprint:
           options:
             - label: "Kein Preset – Eco-Temperatur verwenden"
               value: "__none__"
-            - eco
-            - away
-            - sleep
-            - home
-            - comfort
-            - boost
-            - activity
+            - label: "Eco"
+              value: "eco"
+            - label: "Away"
+              value: "away"
+            - label: "Sleep"
+              value: "sleep"
+            - label: "Home"
+              value: "home"
+            - label: "Comfort"
+              value: "comfort"
+            - label: "Boost"
+              value: "boost"
+            - label: "Activity"
+              value: "activity"
     comfort_preset:
       name: (Optional) Komfort-Preset
       description: >
@@ -61,13 +68,20 @@ blueprint:
           options:
             - label: "Kein Preset – Komfort-Temperatur verwenden"
               value: "__none__"
-            - comfort
-            - eco
-            - home
-            - away
-            - sleep
-            - boost
-            - activity
+            - label: "Comfort"
+              value: "comfort"
+            - label: "Eco"
+              value: "eco"
+            - label: "Home"
+              value: "home"
+            - label: "Away"
+              value: "away"
+            - label: "Sleep"
+              value: "sleep"
+            - label: "Boost"
+              value: "boost"
+            - label: "Activity"
+              value: "activity"
     eco_temperature:
       name: Eco-Temperatur
       description: Fallback-Temperatur in °C für "Eco" (Away, Sleep, nächtliche Umschaltung), wenn kein Eco-Preset gewählt/verfügbar ist.
@@ -157,9 +171,26 @@ variables:
   comfort_preset: !input comfort_preset
 
   # Preset wird nur genutzt, wenn eines gewählt ist UND die Climate-Entität es anbietet
-  # (sonst Fallback auf die feste Temperatur)
-  eco_use_preset: "{{ eco_preset not in ['', '__none__'] and eco_preset in (state_attr(heating_entities, 'preset_modes') or []) }}"
-  comfort_use_preset: "{{ comfort_preset not in ['', '__none__'] and comfort_preset in (state_attr(heating_entities, 'preset_modes') or []) }}"
+  # (Groß-/Kleinschreibung egal; verwendet wird der echte Name aus "preset_modes").
+  # Sonst Fallback auf die feste Temperatur.
+  eco_preset_resolved: >-
+    {%- set ns = namespace(r="") -%}
+    {%- if eco_preset not in ["", "__none__"] -%}
+      {%- for p in (state_attr(heating_entities, "preset_modes") or []) -%}
+        {%- if p | lower == eco_preset | lower -%}{%- set ns.r = p -%}{%- endif -%}
+      {%- endfor -%}
+    {%- endif -%}
+    {{- ns.r -}}
+  eco_use_preset: "{{ eco_preset_resolved != '' }}"
+  comfort_preset_resolved: >-
+    {%- set ns = namespace(r="") -%}
+    {%- if comfort_preset not in ["", "__none__"] -%}
+      {%- for p in (state_attr(heating_entities, "preset_modes") or []) -%}
+        {%- if p | lower == comfort_preset | lower -%}{%- set ns.r = p -%}{%- endif -%}
+      {%- endfor -%}
+    {%- endif -%}
+    {{- ns.r -}}
+  comfort_use_preset: "{{ comfort_preset_resolved != '' }}"
 
   # Keine scene_id Variable mehr nötig, wird durch restore_scene ersetzt
 
@@ -235,6 +266,27 @@ action:
           notification_id: "heating_control_config_error_{{ this.entity_id | replace('.', '_') }}"
       - stop: "Konfigurationsfehler: Scheduler aktiviert aber keine Schedule Entity"
       
+  # Hinweis, wenn ein gewähltes Preset von der Entität nicht angeboten wird (Fallback auf Temperatur)
+  - if:
+      - condition: template
+        value_template: >-
+          {{ state_attr(heating_entities, 'preset_modes') is not none and (
+               (eco_preset not in ['', '__none__'] and not eco_use_preset) or
+               (comfort_preset not in ['', '__none__'] and not comfort_use_preset)) }}
+    then:
+      - service: persistent_notification.create
+        continue_on_error: true
+        data:
+          title: "⚠️ Heizungssteuerung: Preset nicht verfügbar"
+          message: >
+            Die Automation "{{ this.attributes.friendly_name }}" nutzt ein Preset, das
+            "{{ heating_entities }}" nicht anbietet. Es wird stattdessen die feste Temperatur verwendet.
+
+            - Eco-Preset: "{{ eco_preset }}"
+            - Komfort-Preset: "{{ comfort_preset }}"
+            - Verfügbar: {{ state_attr(heating_entities, 'preset_modes') | join(', ') }}
+          notification_id: "heating_control_preset_missing_{{ this.entity_id | replace('.', '_') }}"
+
   - choose:
       # --- HÖCHSTE PRIORITÄT: HEIZUNG AUS ---
       - conditions:
@@ -302,7 +354,7 @@ action:
                 target:
                   entity_id: !input heating_entities
                 data:
-                  preset_mode: "{{ eco_preset }}"
+                  preset_mode: "{{ eco_preset_resolved }}"
             else:
               - service: climate.set_temperature
                 continue_on_error: true
@@ -355,7 +407,7 @@ action:
                 target:
                   entity_id: !input heating_entities
                 data:
-                  preset_mode: "{{ eco_preset }}"
+                  preset_mode: "{{ eco_preset_resolved }}"
             else:
               - service: climate.set_temperature
                 continue_on_error: true
@@ -463,7 +515,7 @@ action:
                 target:
                   entity_id: !input heating_entities
                 data:
-                  preset_mode: "{{ comfort_preset }}"
+                  preset_mode: "{{ comfort_preset_resolved }}"
             else:
               - service: climate.set_temperature
                 continue_on_error: true
@@ -534,7 +586,7 @@ action:
                 target:
                   entity_id: !input heating_entities
                 data:
-                  preset_mode: "{{ eco_preset }}"
+                  preset_mode: "{{ eco_preset_resolved }}"
             else:
               - service: climate.set_temperature
                 continue_on_error: true
@@ -594,7 +646,7 @@ action:
                 target:
                   entity_id: !input heating_entities
                 data:
-                  preset_mode: "{{ comfort_preset }}"
+                  preset_mode: "{{ comfort_preset_resolved }}"
             else:
               - service: climate.set_temperature
                 continue_on_error: true
