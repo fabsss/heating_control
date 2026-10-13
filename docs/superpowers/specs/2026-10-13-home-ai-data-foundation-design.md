@@ -1,6 +1,6 @@
 # KI-Datenbasis für Home Assistant (erste Anwendung: Heizung) – Teilprojekt 1
 
-Stand: 2026-10-13 · Status: Entwurf zur Freigabe
+Stand: 2026-10-13 · Status: umgesetzt und in Betrieb; Befunde der Einrichtung in Abschnitt 14
 
 ## 1. Einordnung
 
@@ -292,3 +292,30 @@ ai/
   docker-compose.yml
   README.md
 ```
+
+## 14. Ergebnisse der Einrichtung (Stand 2026-10-13)
+
+Befunde aus der Inbetriebnahme. Wo sie von den Abschnitten oben abweichen, gelten sie.
+
+### 14.1 Betrieb
+
+- **Läuft** als Stack `home-ai` in Dockhand auf dem Docker-LXC, Image `home-ai-collector` lokal aus dem Repository gebaut. Die Regeldatei `collector.yaml` ist ins Image eingebaut (`/app/config`), Änderungen brauchen einen neuen Bau.
+- **Home Assistant per IP ansprechen:** `HA_URL` verwendet die IP-Adresse. Namen auf `.local` (mDNS) lassen sich im Container nicht auflösen.
+- **Ablage:** Die Live-Datenbank liegt unter `/mnt/data/nobackup/homeassistant/ai/home_ai.sqlite`. Eine Dateikopie im Betrieb ist im WAL-Modus nicht konsistent, deshalb schreibt der Collector täglich um 00:30 Uhr (vor dem PBS-Backup um 01:00) eine konsistente Kopie nach `/mnt/data/backup/databases/home-ai-collector/home_ai.sqlite`. Der Ordnername entspricht dem Containernamen, weil `pre-backup-databases.sh` jeden Ordner unter `databases/` als Container behandelt; für diesen überspringt das Skript den Ordner ohne Fehler.
+- **Erster Start:** Der Lückenabgleich holte für 36 Entitäten bis zu 180 Tage nach (rund 393.000 Zeilen) und brauchte mehrere Minuten. Fortschritt steht seitdem im Log (`Lückenabgleich n/36`), geschrieben wird nach jeder Entität.
+- **Bereich fehlt beim Handy-Raumsensor:** `sensor.fabians_s22_presence_tracker_area_last_seen` hat keinen Bereich, der Raum steckt im Zustand. Die Warnung beim Start ist erwartet.
+
+### 14.2 Bestätigte Annahmen
+
+- **Benutzerkontext bei Better Thermostat (Abschnitt 11):** Bestätigt. Eine Sollwertänderung in der App am Büro-Thermostat erscheint live in `manual_actions` mit `actor_class = manual` und der Benutzer-ID. Better Thermostat ändert dabei `temperature` und `preset_mode` gemeinsam.
+- **Lücken tragen keinen Benutzerkontext:** Zeilen aus der History-API erscheinen als `unknown`. Manuelle Eingriffe während einer Lücke sind daher nicht erkennbar.
+- **Lernsignal:** Nur Eingriffe seit dem Start des Collectors und aus eingespielten alten Datenbanken (mit Kontext) taugen als `manual`.
+
+### 14.3 Befunde zu den Snapshots
+
+- **Zeitraum begrenzt:** Der Snapshot von Juni 2026 enthält 2025-12-29 bis 2026-06-27 (180 Tage Recorder). Für Oktober bis Ende Dezember 2025 ist ein zweiter Snapshot nötig, der nach dem 28.12.2025 und spätestens Ende März 2026 entstand. Erfolgskriterium 5 ist erst damit erfüllt.
+- **Better Thermostat und Hardware-Thermostate laufen parallel**, nicht nacheinander. Die `climate.better_thermostat_*` sind die Regler, `climate.trv_*` (Zigbee) und im Schlafzimmer früher `climate.oeq1256939` und `climate.oeq1720195` (Homematic) die Hardware darunter. Die Annahme „früher war `trv_*` die Quelle, bis Better Thermostat kam“ trifft für den Juni-Snapshot nicht zu.
+- **`history_map.yaml` ist nicht nötig,** solange nur die Entitäten mit Label aufgezeichnet werden. Der Backfill läuft ohne `--history-map`. Die Datei bleibt für den Fall vorgesehen, dass der zweite Snapshot einen Zeitraum ohne Better Thermostat zeigt.
+- **Logger:** Im Juni-Snapshot beginnen die Ereignisse `thermostat_actor_logged` am 2026-01-05 (Abschnitt 2 nannte 2025-10-21; der zweite Snapshot klärt das). Sie betreffen ausschließlich die vier `climate.better_thermostat_*`. Der Abgleich (`verify`) kann daher nur ab diesem Datum prüfen, davor erscheinen manuelle Eingriffe als „ohne Logger-Ereignis“.
+- **Schlafzimmer:** Die Homematic-Thermostate wurden am 2026-03-16 mit der Serverumstellung deaktiviert und erst vor wenigen Wochen durch neue ersetzt (`climate.bedroom_trv_*`, ohne Label). Die Daten von `climate.better_thermostat_bedroom` zwischen 2026-03-16 und dem Tausch sind unzuverlässig (keine echte Regelung) und gehören in der Analyse ausgeschlossen oder markiert.
+- **Sonstiges:** `climate.trv_livingroom_right` hat in Home Assistant keinen Bereich; ohne Auswirkung, solange die Entität nicht aufgezeichnet wird.
