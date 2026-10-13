@@ -9,8 +9,8 @@ services:
       HEALTH_FILE: /tmp/collector.health
       TZ: Europe/Berlin
     volumes:
-      - ./data:/data
-      - ./backup:/backup
+      - /mnt/data/nobackup/homeassistant/ai:/data
+      - /mnt/data/backup/databases:/backup
       - ./config:/config:ro
     healthcheck:
       test: ["CMD", "python", "-m", "collector.healthcheck"]

@@ -8,8 +8,8 @@ flush_interval_s: 30
 registry_sync_interval_s: 600
 timezone: "Europe/Berlin"
 backup:
-  path: "/backup/home_ai.sqlite"
-  time: "03:30"                                         # lokale Zeit
+  path: "/backup/home-ai-collector/home_ai.sqlite"      # Ordnername = Containername (pre-backup-databases.sh)
+  time: "00:30"                                         # lokale Zeit, vor dem PBS-Backup um 01:00
 
 # Anwendungsdomäne und Art je Home-Assistant-Domäne
 domain_defaults:

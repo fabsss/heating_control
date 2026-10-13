@@ -18,6 +18,12 @@ docker compose exec collector python -m collector purge-entity sensor.beispiel
 
 ## Starten
 
+Einmalig auf dem Host die Ordner anlegen (siehe „Sicherung“):
+
+```bash
+mkdir -p /mnt/data/nobackup/homeassistant/ai /mnt/data/backup/databases/home-ai-collector
+```
+
 ```bash
 cp .env.example .env     # Token und Adresse eintragen
 docker compose up -d --build
@@ -56,7 +62,11 @@ docker compose exec collector python -c "import sqlite3; c=sqlite3.connect('/dat
 
 ## Sicherung
 
-Der Collector kopiert die Datenbank täglich um 03:30 Uhr nach `./backup/home_ai.sqlite`. Dieser Ordner lässt sich vom Proxmox Backup Server mitsichern.
+Die Live-Datenbank liegt unter `/mnt/data/nobackup/homeassistant/ai/home_ai.sqlite` und wird nicht direkt gesichert: Sie läuft im WAL-Modus, eine Dateikopie im Betrieb kann inkonsistent sein.
+
+Stattdessen schreibt der Collector täglich um 00:30 Uhr (lokale Zeit, vor dem PBS-Backup um 01:00) mit der SQLite-Backup-Schnittstelle eine konsistente Kopie nach `/mnt/data/backup/databases/home-ai-collector/home_ai.sqlite` (erst in eine temporäre Datei, dann umbenannt). Diese Datei sichert Restic mit. Der Ordnername muss dem Containernamen entsprechen, weil `pre-backup-databases.sh` jeden Ordner unter `databases/` als Container behandelt; für diesen Container überspringt das Skript den Ordner ohne Fehler.
+
+Wiederherstellen: Kopie nach `/mnt/data/nobackup/homeassistant/ai/home_ai.sqlite` legen, Collector starten. Lücken seit der Kopie holt er aus der History-API von Home Assistant nach (höchstens 180 Tage, ohne Benutzerkontext).
 
 ## Hinweise
 
