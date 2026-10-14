@@ -7,6 +7,11 @@ services:
     environment:
       HA_TOKEN: ${HA_TOKEN:?HA_TOKEN fehlt}
       HA_URL: ${HA_URL:?HA_URL fehlt}
+      # Nur für die Analyse (docker exec ... python -m analysis); der Collector startet auch ohne
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      OPENROUTER_PRICE_INPUT: ${OPENROUTER_PRICE_INPUT:-}
+      OPENROUTER_PRICE_OUTPUT: ${OPENROUTER_PRICE_OUTPUT:-}
       COLLECTOR_CONFIG: /app/config/collector.yaml
       HEALTH_FILE: /tmp/collector.health
       TZ: Europe/Berlin
