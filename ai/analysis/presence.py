@@ -10,6 +10,7 @@ from collector.db import Database
 
 from .config import AnalysisConfig
 from .context import UNKNOWN
+from .events import class_labels
 from .interventions import load_interventions
 from .pseudonym import build_pseudonyms
 from .timeline import load_timeline
@@ -53,13 +54,6 @@ def _bucket(minutes: float | None) -> str:
             if minutes <= limit:
                 return label
     return LATER
-
-
-def class_labels(edges: tuple[int, ...]) -> list[str]:
-    labels = [f"<{edges[0]}"]
-    labels += [f"{low}-{high}" for low, high in zip(edges, edges[1:])]
-    labels.append(f"≥{edges[-1]}")
-    return labels
 
 
 def _arrivals(transitions: list, first: datetime | None) -> list[tuple[datetime, float]]:
