@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from .generic import parse_signal_condition, parse_signal_trigger
 from .models import STATUS_OPEN, STATUS_UNTESTABLE, Candidate
 from .pseudonym import Pseudonyms
+from .signals import SignalInfo
 
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 PERSON_EVENTS = ("person_arrives", "person_leaves")
@@ -21,6 +23,8 @@ class ParseContext:
     flat_states: frozenset[str]
     min_setpoint: float = 5.0
     max_setpoint: float = 30.0
+    signals: dict[str, SignalInfo] = field(default_factory=dict)   # nur im Modus scan: allgemeine Signale
+    max_conditions: int | None = None        # nur im Modus scan: höchstens zwei
 
 
 def vocabulary_text() -> str:
@@ -108,6 +112,8 @@ def _trigger(raw: Any, ctx: ParseContext) -> dict:
         if event in PLAIN_EVENTS:
             return {"type": "event", "event": event}
         raise ValueError(f"unbekanntes Ereignis {event!r}")
+    if kind == "signal":
+        return parse_signal_trigger(raw, ctx.signals)
     raise ValueError(f"unbekannter Auslöser {kind!r}")
 
 
@@ -129,6 +135,8 @@ def _condition(raw: Any, ctx: ParseContext) -> dict:
         if not isinstance(raw.get("home"), bool):
             raise ValueError("person_home: home muss true oder false sein")
         return {"type": "person_home", "person": _person(raw.get("person"), ctx), "home": raw["home"]}
+    if kind in ("signal_state", "signal_range"):
+        return parse_signal_condition(raw, ctx.signals)
     raise ValueError(f"unbekannte Bedingung {kind!r}")
 
 
@@ -157,6 +165,8 @@ def parse_candidate(raw: Any, ctx: ParseContext) -> Candidate:
         conditions_raw = raw.get("conditions") or []
         if not isinstance(conditions_raw, list):
             raise ValueError("conditions muss eine Liste sein")
+        if ctx.max_conditions is not None and len(conditions_raw) > ctx.max_conditions:
+            raise ValueError(f"höchstens {ctx.max_conditions} Bedingungen erlaubt")
         return Candidate(
             room=ctx.rooms[name],
             trigger=_trigger(raw.get("trigger"), ctx),
