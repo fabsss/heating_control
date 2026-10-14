@@ -51,3 +51,19 @@ async def fake_hass():
         yield fake
     finally:
         await server.close()
+
+from tests.fake_openrouter import FakeOpenRouter  # noqa: E402
+
+
+@pytest_asyncio.fixture
+async def fake_llm():
+    fake = FakeOpenRouter()
+    app = web.Application()
+    app.router.add_post("/api/v1/chat/completions", fake.handler)
+    server = TestServer(app)
+    await server.start_server()
+    fake.url = f"http://127.0.0.1:{server.port}/api/v1/chat/completions"
+    try:
+        yield fake
+    finally:
+        await server.close()
