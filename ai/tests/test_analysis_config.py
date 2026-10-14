@@ -121,3 +121,22 @@ def test_model_source_reflects_env(tmp_path):
     assert load_analysis_config(write(tmp_path, MINIMAL), env={}).model_source == "datei"
     cfg = load_analysis_config(write(tmp_path, MINIMAL), env={"OPENROUTER_MODEL": "v/m"})
     assert cfg.model_source == "env"
+
+
+def test_scan_defaults_and_signal_labels_of_the_shipped_config():
+    cfg = load_analysis_config(ROOT / "config" / "analysis.yaml")
+    assert cfg.scan.min_events == 8 and cfg.scan.min_hits == 4 and cfg.scan.q_max == 0.1
+    assert cfg.scan.duration_edges == (45, 180) and cfg.scan.top_k == 40 and cfg.scan.control_days == 7
+    assert cfg.signal_labels["sensor.pixel_9a_next_alarm"].startswith("Weckzeit")
+    assert "Fabian" not in " ".join(cfg.signal_labels.values())
+
+
+def test_scan_section_is_optional_and_validated(tmp_path):
+    cfg = load_analysis_config(write(tmp_path, MINIMAL))
+    assert cfg.scan.q_max == 0.1 and cfg.signal_labels == {}
+    custom = load_analysis_config(write(tmp_path, MINIMAL + "scan: {duration_edges: [90, 30], top_k: 5}\n"))
+    assert custom.scan.duration_edges == (30, 90) and custom.scan.top_k == 5
+    for bad, match in (("scan: {nope: 1}\n", "nope"), ("scan: {q_max: 0}\n", "q_max"),
+                       ("scan: {duration_edges: []}\n", "duration_edges"), ("scan: {min_hits: 0}\n", "min_hits")):
+        with pytest.raises(AnalysisConfigError, match=match):
+            load_analysis_config(write(tmp_path, MINIMAL + bad))

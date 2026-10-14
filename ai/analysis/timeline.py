@@ -17,6 +17,9 @@ class Timeline:
     def __bool__(self) -> bool:
         return bool(self._points)
 
+    def points(self) -> list[tuple[datetime, str | None]]:
+        return list(self._points)
+
     def first_ts(self) -> datetime | None:
         return self._times[0] if self._times else None
 

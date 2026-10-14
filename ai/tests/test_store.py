@@ -73,3 +73,32 @@ def test_pseudonyms_roundtrip(store):
     store.save_pseudonyms({"person_1": ("person.a", "person"), "person_2": ("person.b", "person")})
     store.commit()
     assert store.load_pseudonyms() == {"person_1": "person.a", "person_2": "person.b"}
+
+
+def test_assign_handles_are_stable_and_never_reused(store):
+    first = store.assign_handles(["sensor.b", "sensor.a"])
+    assert first == {"sensor.a": "sig_01", "sensor.b": "sig_02"}
+    again = store.assign_handles(["sensor.b", "sensor.0_new", "sensor.a"])
+    assert again == {"sensor.b": "sig_02", "sensor.0_new": "sig_03", "sensor.a": "sig_01"}
+    store.update_signal("sig_03", "env", "numeric", "Sensor")
+    assert store.signal_descriptions()["sig_03"] == "Sensor"
+    assert [row["handle"] for row in store.list_signals()] == ["sig_01", "sig_02", "sig_03"]
+
+
+def test_associations_roundtrip_in_rank_order(store):
+    from analysis.models import Association
+    run_id = store.start_run("scan-only", "-", {}, NOW)
+    weak = Association("sig_01", "to_state", "home", "alle", None, 0, 30, 30, 8, 200, 20, 2.5, 0.01, 0.04, "Sollwert 21 °C (6 von 8)")
+    strong = Association("sig_02", "alarm_time", None, "alle", "r_living", 0, 30, 40, 38, 500, 30, 15.0, 1e-9, 1e-7)
+    store.save_associations(run_id, [weak, strong])
+    store.commit()
+    assert store.list_associations(run_id) == [strong, weak]
+    assert store.list_associations(run_id + 1) == []
+
+
+def test_association_rows_vanish_on_rollback(store):
+    from analysis.models import Association
+    run_id = store.start_run("scan", "m", {}, NOW)
+    store.save_associations(run_id, [Association("sig_01", "to_state", "home", "alle", None, 0, 30, 10, 5, 50, 2, 3.0, 0.01, 0.02)])
+    store.rollback()
+    assert store.list_associations(run_id) == []

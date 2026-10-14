@@ -7,7 +7,7 @@ from pathlib import Path
 from collector.db import Database
 from collector.models import to_utc_iso
 
-from .models import Candidate
+from .models import Association, Candidate
 
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "sql" / "analysis.sql"
 
@@ -136,3 +136,46 @@ class Store:
 
     def load_pseudonyms(self) -> dict[str, str]:
         return {row["alias"]: row["entity_id"] for row in self.conn.execute("SELECT * FROM pseudonyms")}
+
+    # --- Signale und Assoziationen ----------------------------------------------
+
+    def assign_handles(self, entity_ids: list[str]) -> dict[str, str]:
+        """Kennungen sig_NN: bestehende bleiben, neue Entitäten bekommen die nächste freie Nummer."""
+        known = {row["entity_id"]: row["handle"]
+                 for row in self.conn.execute("SELECT handle, entity_id FROM signals")}
+        highest = max((int(handle.split("_")[1]) for handle in known.values()), default=0)
+        for entity_id in sorted(entity_ids):
+            if entity_id not in known:
+                highest += 1
+                known[entity_id] = f"sig_{highest:02d}"
+                self.conn.execute(
+                    "INSERT INTO signals(handle, entity_id, kind, value_kind, description) "
+                    "VALUES (?, ?, '', 'none', '')", (known[entity_id], entity_id))
+        self.conn.commit()
+        return {entity_id: known[entity_id] for entity_id in entity_ids}
+
+    def update_signal(self, handle: str, kind: str, value_kind: str, description: str) -> None:
+        self.conn.execute("UPDATE signals SET kind = ?, value_kind = ?, description = ? WHERE handle = ?",
+                          (kind, value_kind, description, handle))
+        self.conn.commit()
+
+    def list_signals(self):
+        return self.conn.execute("SELECT * FROM signals ORDER BY handle").fetchall()
+
+    def signal_descriptions(self) -> dict[str, str]:
+        return {row["handle"]: row["description"] for row in self.list_signals()}
+
+    def save_associations(self, run_id: int, items: list[Association]) -> None:
+        self.conn.executemany(
+            "INSERT INTO associations(run_id, signal, event, value, prev_class, room, win_start, win_end, "
+            "events, hits, control_events, control_hits, lift, p, q, typical_action) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(run_id, a.signal, a.event, a.value, a.prev_class, a.room, a.win_start, a.win_end, a.events,
+              a.hits, a.control_events, a.control_hits, a.lift, a.p, a.q, a.typical_action) for a in items])
+
+    def list_associations(self, run_id: int) -> list[Association]:
+        rows = self.conn.execute("SELECT * FROM associations WHERE run_id = ? ORDER BY q, -lift, id", (run_id,))
+        return [Association(row["signal"], row["event"], row["value"], row["prev_class"], row["room"],
+                            row["win_start"], row["win_end"], row["events"], row["hits"],
+                            row["control_events"], row["control_hits"], row["lift"], row["p"], row["q"],
+                            row["typical_action"] or "") for row in rows]

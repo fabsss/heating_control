@@ -35,6 +35,35 @@ CREATE TABLE IF NOT EXISTS backtest_results(
   PRIMARY KEY(candidate_id, metric)
 );
 
+CREATE TABLE IF NOT EXISTS signals(
+  handle      TEXT PRIMARY KEY,                -- sig_01, sig_02, ... (dauerhaft, nie neu vergeben)
+  entity_id   TEXT NOT NULL UNIQUE,
+  kind        TEXT NOT NULL,
+  value_kind  TEXT NOT NULL,                   -- categorical|numeric|timestamp|none
+  description TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS associations(
+  id             INTEGER PRIMARY KEY,
+  run_id         INTEGER NOT NULL REFERENCES analysis_runs(id),
+  signal         TEXT NOT NULL,
+  event          TEXT NOT NULL,                -- to_state|rises_above|falls_below|alarm_time
+  value          TEXT,
+  prev_class     TEXT,                         -- alle|<45|45-180|>=180 ...
+  room           TEXT,                         -- area_id, NULL = alle Räume
+  win_start      INTEGER NOT NULL,             -- Minuten relativ zum Ereignis
+  win_end        INTEGER NOT NULL,
+  events         INTEGER NOT NULL,
+  hits           INTEGER NOT NULL,
+  control_events INTEGER NOT NULL,
+  control_hits   INTEGER NOT NULL,
+  lift           REAL NOT NULL,
+  p              REAL NOT NULL,
+  q              REAL NOT NULL,
+  typical_action TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_assoc_run ON associations(run_id);
+
 CREATE TABLE IF NOT EXISTS pseudonyms(
   alias     TEXT PRIMARY KEY,                  -- person_1, person_2, ...
   entity_id TEXT NOT NULL,

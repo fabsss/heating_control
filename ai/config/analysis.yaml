@@ -39,6 +39,25 @@ context:
   office_day: binary_sensor.office_day_template
   outside_temperature: sensor.environment_sensor_outside_temperature
 
+# Beschreibungen für das Modell (statt aus Namen abgeleitet). Keine Klarnamen verwenden.
+signal_labels:
+  sensor.pixel_9a_next_alarm: "Weckzeit (nächster Wecker, Gerät 1)"
+  sensor.sm_s901b_next_alarm: "Weckzeit (nächster Wecker, Gerät 2)"
+  sensor.fabians_mobile_alarmclock_triggered: "Wecker klingelt (Person 1)"
+  sensor.svenjas_mobile_alarmclock_triggered: "Wecker klingelt (Person 2)"
+
+# Automatische Voranalyse: Signale, Ereignisse, Kontrolle, Signifikanz
+scan:
+  min_events: 8
+  min_hits: 4
+  q_max: 0.1
+  top_k: 40
+  min_room_interventions: 10
+  duration_edges: [45, 180]
+  control_days: 7
+  max_values: 12
+  min_value_count: 8
+
 clusters:
   min_size: 3
   window_min: 90                           # Breite des Zeitfensters (±45 Minuten)

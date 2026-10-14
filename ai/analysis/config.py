@@ -16,7 +16,7 @@ TOP_KEYS = {
     "model", "openrouter_url", "provider", "price_per_mtok", "max_output_tokens", "max_cost_usd",
     "temperature", "request_timeout_s", "retries", "retry_backoff_s", "max_candidates", "timezone",
     "min_interventions", "merge_interventions_s", "room_names", "exclusions", "context", "clusters",
-    "backtest",
+    "backtest", "signal_labels", "scan",
 }
 CONTEXT_KEYS = {"flat_state", "in_bed", "office_day", "outside_temperature"}
 
@@ -42,6 +42,19 @@ class BacktestParams:
     min_abdeckung: float = 0.3
     max_fehlausloesungen: float = 0.4
     active_gap_days: int = 21        # Eingriffs-Pausen darüber trennen aktive Zeiträume; 0 schaltet den Filter ab
+
+
+@dataclass(frozen=True)
+class ScanParams:
+    min_events: int = 8              # Ereignisart mit weniger Ereignissen wird nicht geprüft
+    min_hits: int = 4                # so viele Ereignisse mit Eingriff mindestens
+    q_max: float = 0.1               # Grenze der korrigierten Irrtumswahrscheinlichkeit
+    top_k: int = 40                  # so viele Assoziationen gehen an das Modell
+    min_room_interventions: int = 10
+    duration_edges: tuple[int, ...] = (45, 180)    # Minuten, Klassengrenzen der Dauer des vorherigen Zustands
+    control_days: int = 7            # Kontrolltage vor und nach dem Ereignis
+    max_values: int = 12             # mehr verschiedene Zustände: Signal ist keine Kategorie
+    min_value_count: int = 8         # seltenere Zustände werden zu "other"
 
 
 @dataclass(frozen=True)
@@ -74,6 +87,8 @@ class AnalysisConfig:
     context: dict[str, str]
     clusters: ClusterParams
     backtest: BacktestParams
+    signal_labels: dict[str, str] = field(default_factory=dict)
+    scan: ScanParams = field(default_factory=ScanParams)
     price_source: str = "datei"             # datei | env | openrouter
     model_source: str = "datei"             # datei | env
 
@@ -82,6 +97,18 @@ def _only(where: str, data: dict, allowed: set[str]) -> None:
     unknown = set(data) - allowed
     if unknown:
         raise AnalysisConfigError(f"{where}: unbekannte Schlüssel {sorted(unknown)}")
+
+
+def _scan(raw: dict[str, Any]) -> ScanParams:
+    _only("scan", raw, {f.name for f in fields(ScanParams)})
+    params = ScanParams(**{key: value for key, value in raw.items() if key != "duration_edges"})
+    edges = tuple(sorted({int(edge) for edge in raw.get("duration_edges", params.duration_edges)}))
+    if not edges or edges[0] <= 0:
+        raise AnalysisConfigError("scan.duration_edges braucht mindestens eine positive Zahl")
+    if not 0 < params.q_max <= 1 or params.min_hits < 1 or params.min_events < 1:
+        raise AnalysisConfigError("scan: q_max muss in (0, 1] liegen, min_hits und min_events mindestens 1")
+    return ScanParams(**{**{key: value for key, value in raw.items() if key != "duration_edges"},
+                         "duration_edges": edges})
 
 
 def _clusters(raw: dict[str, Any]) -> ClusterParams:
@@ -170,6 +197,8 @@ def load_analysis_config(path: str | Path, env: Mapping[str, str] | None = None)
         context={key: str(value) for key, value in context.items()},
         clusters=_clusters(dict(raw.get("clusters") or {})),
         backtest=BacktestParams(**backtest_raw),
+        signal_labels={str(k): str(v) for k, v in (raw.get("signal_labels") or {}).items()},
+        scan=_scan(dict(raw.get("scan") or {})),
         price_source="env" if from_env else "datei",
         model_source="env" if env_model else "datei",
     )
