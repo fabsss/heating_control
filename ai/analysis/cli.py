@@ -120,6 +120,8 @@ def _cmd_list(cfg, db: Database, store: Store, args) -> int:
         if metrics:
             line += (f"  abdeckung={metrics['abdeckung']:.2f} fehlausloesungen={metrics['fehlausloesungen']:.2f} "
                      f"faelle={metrics['faelle']:.0f} wochen={metrics['wochen']:.0f}")
+            if "wirksam" in metrics:
+                line += f" wirksam={metrics['wirksam']:.0f} neutral={metrics['neutral']:.0f}"
         print(line)
     return 0
 

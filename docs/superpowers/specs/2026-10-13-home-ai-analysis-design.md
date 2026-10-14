@@ -113,9 +113,16 @@ Der Backtest läuft ohne LLM. Für jeden Tag, an dem der Auslöser samt Bedingun
 | Kennzahl | Bedeutung |
 |----------|-----------|
 | `abdeckung` | Anteil der Eingriffe dieser Art (Raum, gleiche Aktion), die die Regel vorweggenommen hätte |
-| `fehlausloesungen` | Anteil der Auslösungen, auf die kein ähnlicher Eingriff folgt oder bei denen innerhalb einer Stunde das Gegenteil eingestellt wird |
+| `fehlausloesungen` | Anteil der **wirksamen** Auslösungen, auf die kein ähnlicher Eingriff folgt oder bei denen innerhalb einer Stunde das Gegenteil eingestellt wird |
+| `neutral` | Auslösungen, die nichts verändert hätten: Heizung aus (alle Thermostate des Raums) oder der Zielwert gilt bereits. Sie zählen weder als Treffer noch als Fehler |
+| `wirksam` | Auslösungen ohne die neutralen (`ausloesungen` − `neutral`); Nenner der Fehlauslösungen |
 | `faelle` | Anzahl passender Auslösungen mit Eingriff |
 | `wochen` | Anzahl verschiedener Kalenderwochen, in denen Fälle vorkamen |
+
+**Wirksame Auslösungen und aktive Zeiträume (Änderung nach dem ersten Lauf auf echten Daten).** Die erste Fassung zählte jede Auslösung ohne Eingriff als Fehler, auch im Sommer und an Tagen, an denen der Zeitplan den Zielwert ohnehin schon gesetzt hatte. Bei seltenen Eingriffen lagen die Fehlauslösungen dadurch bei 0,93 bis 1,00 und kein Kandidat konnte bestehen. Jetzt gilt:
+
+1. **Neutral:** Zum Auslösezeitpunkt wird der tatsächliche Zustand der Thermostate des Raums aus `state_changes` gelesen (Zeitplan, Automationen und Eingriffe zusammen). Ist die Heizung aus oder der Sollwert (Toleranz `setpoint_tolerance`) beziehungsweise das Preset schon der Zielwert, ist die Auslösung neutral. Fehlen Daten zum Thermostat oder ist der Sollwert unbekannt, gilt sie als wirksam (altes Verhalten). Ein Treffer geht immer vor.
+2. **Aktive Zeiträume:** Ausgewertet werden nur Tage in der Nähe von Eingriffen im Raum. Pausen von mehr als `active_gap_days` (Vorschlag 21) trennen Zeiträume, der Rand beträgt einen lokalen Tag. So zählt ein Sommer ohne Eingriffe nicht gegen die Regel. `active_gap_days: 0` schaltet das ab; Räume ohne Eingriffe werden nicht gefiltert.
 
 **Status eines Kandidaten:** `bestanden` (genug Belege, Abdeckung und Fehlauslösungen innerhalb der Schwellen), `zu_wenig_belege` (unter fünf Fälle oder unter drei Wochen), `abgelehnt` (Belege genug, Schwellen verfehlt), `nicht_pruefbar`. Die Schwellen sind Vorschläge und liegen in `analysis.yaml`.
 

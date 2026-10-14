@@ -37,6 +37,59 @@ class Backtester:
         self._pool: dict[tuple[str, str], list[Intervention]] = defaultdict(list)
         for item in sorted(interventions, key=lambda entry: entry.ts):
             self._pool[(item.room, item.kind)].append(item)
+        self._active = self._active_periods(interventions)
+
+    def _active_periods(self, interventions: list[Intervention]) -> dict[str, list[tuple[datetime, datetime]]]:
+        """Zeiträume je Raum, in denen überhaupt eingegriffen wird; große Pausen (Sommer) zählen nicht."""
+        gap = timedelta(days=self.cfg.backtest.active_gap_days)
+        if gap <= timedelta(0):
+            return {}
+        by_room: dict[str, list[datetime]] = defaultdict(list)
+        for item in interventions:
+            by_room[item.room].append(item.ts)
+        periods: dict[str, list[tuple[datetime, datetime]]] = {}
+        for room, times in by_room.items():
+            times.sort()
+            spans = []
+            first = last = times[0]
+            for ts in times[1:]:
+                if ts - last > gap:
+                    spans.append(self._span(first, last))
+                    first = ts
+                last = ts
+            spans.append(self._span(first, last))
+            periods[room] = spans
+        return periods
+
+    def _span(self, first: datetime, last: datetime) -> tuple[datetime, datetime]:
+        """Ganze lokale Tage: ein Tag vor dem ersten bis ein Tag nach dem letzten Eingriff."""
+        def midnight(ts: datetime, days: int) -> datetime:
+            local = ts.astimezone(self.tz).date() + timedelta(days=days)
+            return datetime(local.year, local.month, local.day, tzinfo=self.tz).astimezone(timezone.utc)
+        return midnight(first, -1), midnight(last, 2)
+
+    def _is_active(self, room: str, instant: datetime) -> bool:
+        spans = self._active.get(room)
+        return True if not spans else any(start <= instant < end for start, end in spans)
+
+    def _is_neutral(self, candidate: Candidate, instant: datetime) -> bool:
+        """Die Regel hätte nichts verändert: Heizung aus oder der Zielwert gilt bereits."""
+        informative = [s for s in self.ctx.climate(candidate.room) if s.state.value_at(instant) is not None]
+        if not informative:
+            return False
+        running = [s for s in informative if s.state.value_at(instant) not in ("off", "unavailable", "unknown")]
+        if not running:
+            return True
+        action = candidate.action
+        for item in running:
+            if action["type"] == "preset":
+                if item.preset.value_at(instant) != str(action["value"]):
+                    return False
+            else:
+                current = item.temperature.numeric_at(instant)
+                if current is None or abs(current - float(action["value"])) > self.cfg.backtest.setpoint_tolerance:
+                    return False
+        return True
 
     def evaluate(self, candidate: Candidate) -> BacktestResult:
         try:
@@ -50,6 +103,7 @@ class Backtester:
         instants = [instant for instant in instants
                     if self.start <= instant < self.end
                     and not excluded(self.cfg, candidate.room, instant)
+                    and self._is_active(candidate.room, instant)
                     and self._conditions_hold(candidate, instant)]
         return self._measure(candidate, instants)
 
@@ -164,7 +218,7 @@ class Backtester:
         reach = max(match_window, contrary_window)
         covered: set[int] = set()
         weeks: set[tuple[int, int]] = set()
-        cases = false_triggers = 0
+        cases = false_triggers = neutral = 0
         for instant in instants:
             low = bisect_right(times, instant)
             high = bisect_right(times, instant + reach)
@@ -176,12 +230,18 @@ class Backtester:
                 covered.update(matched)
                 iso = instant.astimezone(self.tz).isocalendar()
                 weeks.add((iso[0], iso[1]))
-            if not matched or contrary:
+                if contrary:
+                    false_triggers += 1
+            elif self._is_neutral(candidate, instant):
+                neutral += 1
+            else:
                 false_triggers += 1
         coverage = len(covered) / total if total else 0.0
-        false_rate = false_triggers / len(instants) if instants else 0.0
-        metrics = {"ausloesungen": float(len(instants)), "faelle": float(cases), "wochen": float(len(weeks)),
-                   "eingriffe_gesamt": float(total), "abdeckung": coverage, "fehlausloesungen": false_rate}
+        effective = len(instants) - neutral
+        false_rate = false_triggers / effective if effective else 0.0
+        metrics = {"ausloesungen": float(len(instants)), "neutral": float(neutral), "wirksam": float(effective),
+                   "faelle": float(cases), "wochen": float(len(weeks)), "eingriffe_gesamt": float(total),
+                   "abdeckung": coverage, "fehlausloesungen": false_rate}
         if cases < params.min_faelle or len(weeks) < params.min_wochen:
             return BacktestResult(
                 STATUS_FEW,

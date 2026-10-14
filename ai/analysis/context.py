@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime
 
 from collector.db import Database
+from collector.models import parse_utc
 
 from .config import AnalysisConfig
 from .pseudonym import Pseudonyms
@@ -17,6 +19,28 @@ def _flag(timeline: Timeline, ts: datetime, on: str) -> bool | None:
     return None if value in UNKNOWN else value == on
 
 
+@dataclass(frozen=True)
+class ClimateSeries:
+    """Verlauf eines Thermostats: Heizmodus, Sollwert und Preset (aus allen Quellen, nicht nur Eingriffe)."""
+    state: Timeline
+    temperature: Timeline
+    preset: Timeline
+
+
+def load_climate_series(db: Database, entity_id: str) -> ClimateSeries:
+    states, temperatures, presets = [], [], []
+    rows = db.conn.execute(
+        "SELECT ts_utc, state, json_extract(attrs, '$.temperature') AS temperature, "
+        "json_extract(attrs, '$.preset_mode') AS preset FROM state_changes "
+        "WHERE entity_id = ? ORDER BY ts_utc, id", (entity_id,))
+    for row in rows:
+        ts = parse_utc(row["ts_utc"])
+        states.append((ts, row["state"]))
+        temperatures.append((ts, None if row["temperature"] is None else str(row["temperature"])))
+        presets.append((ts, None if row["preset"] is None else str(row["preset"])))
+    return ClimateSeries(Timeline(states), Timeline(temperatures), Timeline(presets))
+
+
 class ContextProvider:
     """Liefert den Kontext (Anwesenheit, Wohnungszustand, Fenster, Wetter) zu einem Zeitpunkt.
 
@@ -27,7 +51,8 @@ class ContextProvider:
                  flat_state: Timeline | None = None, in_bed: Timeline | None = None,
                  office_day: Timeline | None = None, outside_temp: Timeline | None = None,
                  windows: dict[str, list[Timeline]] | None = None,
-                 presence: dict[str, list[Timeline]] | None = None):
+                 presence: dict[str, list[Timeline]] | None = None,
+                 climate: dict[str, list[ClimateSeries]] | None = None):
         self.pseudo = pseudo
         self._persons = persons or {}
         self.flat_state = flat_state or Timeline()
@@ -36,6 +61,7 @@ class ContextProvider:
         self.outside_temp = outside_temp or Timeline()
         self._windows = windows or {}
         self._presence = presence or {}
+        self._climate = climate or {}
 
     @classmethod
     def empty(cls, pseudo: Pseudonyms | None = None) -> "ContextProvider":
@@ -52,6 +78,10 @@ class ContextProvider:
                 "SELECT entity_id, room FROM entities WHERE kind = 'presence' AND room IS NOT NULL "
                 "AND entity_id LIKE 'binary_sensor.%'"):
             presence[row["room"]].append(load_timeline(db, row["entity_id"]))
+        climate: dict[str, list[ClimateSeries]] = defaultdict(list)
+        for row in db.conn.execute(
+                "SELECT entity_id, room FROM entities WHERE kind = 'climate' AND room IS NOT NULL"):
+            climate[row["room"]].append(load_climate_series(db, row["entity_id"]))
         return cls(
             pseudo,
             persons={entity_id: load_timeline(db, entity_id) for entity_id in pseudo.persons},
@@ -61,10 +91,14 @@ class ContextProvider:
             outside_temp=load_timeline(db, cfg.context["outside_temperature"]),
             windows=dict(windows),
             presence=dict(presence),
+            climate=dict(climate),
         )
 
     def person_timeline(self, entity_id: str) -> Timeline:
         return self._persons.get(entity_id, Timeline())
+
+    def climate(self, room: str) -> list[ClimateSeries]:
+        return self._climate.get(room, [])
 
     def windows(self, room: str) -> list[Timeline]:
         return self._windows.get(room, [])

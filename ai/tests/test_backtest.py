@@ -1,11 +1,11 @@
-from dataclasses import replace
+﻿from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
 
 from analysis.backtest import Backtester
 from analysis.config import Exclusion
-from analysis.context import ContextProvider
+from analysis.context import ClimateSeries, ContextProvider
 from analysis.models import (STATUS_FEW, STATUS_PASSED, STATUS_REJECTED, STATUS_UNTESTABLE,
                              Candidate, Intervention)
 from analysis.pseudonym import Pseudonyms
@@ -49,8 +49,9 @@ def with_persons(timelines):
 def test_time_trigger_with_matching_habit_passes(acfg):
     result = backtester(acfg, weekday_interventions()).evaluate(rule(time_rule()))
     assert result.status == STATUS_PASSED
-    assert result.metrics == {"ausloesungen": 30.0, "faelle": 30.0, "wochen": 6.0,
-                              "eingriffe_gesamt": 30.0, "abdeckung": 1.0, "fehlausloesungen": 0.0}
+    assert result.metrics == {"ausloesungen": 30.0, "neutral": 0.0, "wirksam": 30.0, "faelle": 30.0,
+                              "wochen": 6.0, "eingriffe_gesamt": 30.0, "abdeckung": 1.0,
+                              "fehlausloesungen": 0.0}
 
 
 def test_time_trigger_follows_local_time_across_dst(acfg):
@@ -255,3 +256,85 @@ def test_person_home_condition_without_person_data_is_untestable(acfg):
                      conditions=[{"type": "person_home", "person": "person.unbekannt", "home": True}])
     result = backtester(acfg, weekday_interventions()).evaluate(candidate)
     assert result.status == STATUS_UNTESTABLE and result.note
+
+
+# --- Wirksame Auslösungen: bereits erreichter Zielwert, Heizung aus, aktive Zeiträume ---------
+
+HIT_DAYS = (0, 1, 7, 8, 14, 15)             # Mo/Di dreier Wochen, 17:32 auf 21 °C
+
+
+def hits():
+    return [iv(n, "17:32", 21.0) for n in HIT_DAYS]
+
+
+def series(state="heat", temperature="21.0", preset="comfort"):
+    start = START - timedelta(days=1)
+    return ClimateSeries(Timeline([(start, state)]), Timeline([(start, temperature)]), Timeline([(start, preset)]))
+
+
+def climate_ctx(*all_series):
+    return ContextProvider(Pseudonyms((), {}, {}), climate={"r": list(all_series)})
+
+
+def no_gap_filter(cfg):
+    return replace(cfg, backtest=replace(cfg.backtest, active_gap_days=0))
+
+
+def test_firing_at_the_target_value_is_neutral_not_false(acfg):
+    cfg = no_gap_filter(acfg)
+    result = backtester(cfg, hits(), climate_ctx(series(temperature="21.0"))).evaluate(rule(time_rule()))
+    assert result.metrics["ausloesungen"] == 30.0 and result.metrics["neutral"] == 24.0
+    assert result.metrics["wirksam"] == 6.0 and result.metrics["fehlausloesungen"] == 0.0
+    assert result.status == STATUS_PASSED
+
+
+def test_firing_while_heating_is_off_is_neutral(acfg):
+    cfg = no_gap_filter(acfg)
+    result = backtester(cfg, hits(), climate_ctx(series(state="off", temperature="5.0"))).evaluate(rule(time_rule()))
+    assert result.metrics["neutral"] == 24.0 and result.metrics["fehlausloesungen"] == 0.0
+
+
+def test_firing_that_would_change_the_setpoint_without_intervention_is_false(acfg):
+    cfg = no_gap_filter(acfg)
+    result = backtester(cfg, hits(), climate_ctx(series(temperature="19.0"))).evaluate(rule(time_rule()))
+    assert result.metrics["neutral"] == 0.0 and result.metrics["wirksam"] == 30.0
+    assert result.metrics["fehlausloesungen"] == pytest.approx(24 / 30)
+    assert result.status == STATUS_REJECTED
+
+
+def test_unknown_current_setpoint_is_not_neutral(acfg):
+    cfg = no_gap_filter(acfg)
+    result = backtester(cfg, hits(), climate_ctx(series(temperature=None))).evaluate(rule(time_rule()))
+    assert result.metrics["neutral"] == 0.0
+
+
+def test_one_thermostat_off_target_makes_the_firing_effective(acfg):
+    cfg = no_gap_filter(acfg)
+    both = climate_ctx(series(temperature="21.0"), series(temperature="18.0"))
+    assert backtester(cfg, hits(), both).evaluate(rule(time_rule())).metrics["neutral"] == 0.0
+    one_off = climate_ctx(series(temperature="21.0"), series(state="off", temperature="5.0"))
+    assert backtester(cfg, hits(), one_off).evaluate(rule(time_rule())).metrics["neutral"] == 24.0
+
+
+def test_preset_action_is_neutral_when_preset_already_set(acfg):
+    cfg = no_gap_filter(acfg)
+    preset_hits = [iv(n, "17:32", "comfort", kind="preset") for n in HIT_DAYS]
+    candidate = rule(time_rule(), action={"type": "preset", "value": "comfort"})
+    result = backtester(cfg, preset_hits, climate_ctx(series(preset="comfort"))).evaluate(candidate)
+    assert result.metrics["neutral"] == 24.0
+    other = backtester(cfg, preset_hits, climate_ctx(series(preset="eco"))).evaluate(candidate)
+    assert other.metrics["neutral"] == 0.0
+
+
+def test_room_without_climate_data_keeps_old_behaviour(acfg):
+    cfg = no_gap_filter(acfg)
+    result = backtester(cfg, hits()).evaluate(rule(time_rule()))
+    assert result.metrics["neutral"] == 0.0 and result.metrics["wirksam"] == 30.0
+
+
+def test_only_periods_with_interventions_in_the_room_are_evaluated(acfg):
+    block = [iv(n, "17:32") for n in range(14) if day(n).weekday() < 5] + [iv(39, "17:32")]
+    result = backtester(acfg, block).evaluate(rule(time_rule()))
+    assert result.metrics["ausloesungen"] == 12.0          # 10 im ersten Block, 2 um den Einzeleingriff
+    unfiltered = backtester(no_gap_filter(acfg), block).evaluate(rule(time_rule()))
+    assert unfiltered.metrics["ausloesungen"] == 30.0

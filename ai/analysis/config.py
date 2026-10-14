@@ -41,6 +41,7 @@ class BacktestParams:
     min_wochen: int = 3
     min_abdeckung: float = 0.3
     max_fehlausloesungen: float = 0.4
+    active_gap_days: int = 21        # Eingriffs-Pausen darüber trennen aktive Zeiträume; 0 schaltet den Filter ab
 
 
 @dataclass(frozen=True)

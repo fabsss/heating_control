@@ -106,3 +106,12 @@ def test_snapshot_reads_windows_presence_and_temperature(db, acfg):
     assert snap["room_occupied"] is True
     assert snap["outside_temp"] == 7.5 and snap["flat_state"] == "home"
     assert ctx.snapshot("anderer_raum", later)["windows_closed"] is None
+
+
+def test_context_loads_thermostat_history_for_the_backtest(habit):
+    _, _, ctx, interventions, start, end = habit
+    (series,) = ctx.climate(ROOM)
+    moment = interventions[0].ts + timedelta(minutes=1)
+    assert series.state.value_at(moment) == "heat"
+    assert series.temperature.numeric_at(moment) is not None
+    assert ctx.climate("gibt-es-nicht") == []
