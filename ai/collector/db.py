@@ -94,6 +94,26 @@ class Database:
         )
         self.conn.commit()
 
+    def extend_room_to_beginning(self, entity_id: str, room: str, role: str) -> None:
+        """Lässt den frühesten Raumeintrag „seit jeher“ gelten (für eingespielte alte Daten).
+
+        Gibt es noch keinen Eintrag, wird der aktuelle Raum ohne Anfang angelegt.
+        Spätere Umzüge und explizite Einträge aus der history_map bleiben unverändert.
+        """
+        first = self.conn.execute(
+            "SELECT rowid, valid_from FROM room_map WHERE entity_id = ? ORDER BY valid_from LIMIT 1",
+            (entity_id,),
+        ).fetchone()
+        if first is None:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO room_map(room, entity_id, role, valid_from, valid_to) "
+                "VALUES (?, ?, ?, '', NULL)",
+                (room, entity_id, role),
+            )
+        elif first["valid_from"] != "":
+            self.conn.execute("UPDATE room_map SET valid_from = '' WHERE rowid = ?", (first["rowid"],))
+        self.conn.commit()
+
     def add_history_room(self, room: str, entity_id: str, role: str,
                          valid_from: str | None, valid_to: str | None) -> None:
         self.conn.execute(

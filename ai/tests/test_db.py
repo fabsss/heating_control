@@ -109,6 +109,31 @@ def test_sync_room_closes_old_row_when_area_changes(db: Database):
     assert [(r["room"], r["valid_to"] is None) for r in rows] == [("buero", False), ("flur", True)]
 
 
+def test_extend_room_to_beginning_creates_row_when_none_exists(db: Database):
+    db.extend_room_to_beginning("climate.bt", "buero", "climate")
+    row = db.conn.execute("SELECT room, role, valid_from, valid_to FROM room_map").fetchone()
+    assert tuple(row) == ("buero", "climate", "", None)
+
+
+def test_extend_room_to_beginning_backdates_the_first_live_row(db: Database):
+    db.sync_room("climate.bt", "buero", "climate", T0 + timedelta(days=100))
+    db.extend_room_to_beginning("climate.bt", "buero", "climate")
+    db.extend_room_to_beginning("climate.bt", "buero", "climate")       # idempotent
+    rows = db.conn.execute("SELECT room, valid_from, valid_to FROM room_map").fetchall()
+    assert [tuple(r) for r in rows] == [("buero", "", None)]
+    db.sync_room("climate.bt", "buero", "climate", T0 + timedelta(days=101))   # nichts Neues
+    assert db.conn.execute("SELECT COUNT(*) FROM room_map").fetchone()[0] == 1
+
+
+def test_extend_room_to_beginning_only_changes_the_earliest_of_several_rows(db: Database):
+    db.sync_room("climate.bt", "buero", "climate", T0)
+    db.sync_room("climate.bt", "flur", "climate", T0 + timedelta(days=30))
+    db.extend_room_to_beginning("climate.bt", "flur", "climate")
+    rows = db.conn.execute("SELECT room, valid_from FROM room_map ORDER BY valid_from").fetchall()
+    assert [(r["room"], r["valid_from"]) for r in rows] == [
+        ("buero", ""), ("flur", "2026-01-31T10:00:00.000000+00:00")]
+
+
 def test_add_history_room_is_idempotent(db: Database):
     for _ in range(2):
         db.add_history_room("buero", "climate.trv_office", "climate", None, "2025-12-01T00:00:00+00:00")

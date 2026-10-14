@@ -79,6 +79,25 @@ def test_only_climate_entities_are_considered(db: Database):
     assert rows(db) == []
 
 
+def test_room_follows_room_map_over_time(db: Database):
+    db.upsert_entity(CLIMATE, "flur", T0)          # entities.room ist der aktuelle Raum
+    db.add_history_room("buero", "climate.bt", "climate", None, "2026-01-01T10:00:30.000000+00:00")
+    db.add_history_room("flur", "climate.bt", "climate", "2026-01-01T10:00:30.000000+00:00", None)
+    add(db, 0, "heat", 17, "none")
+    add(db, 20, "heat", 18, "none", user="u1")      # vor dem Umzug
+    add(db, 60, "heat", 19, "none", user="u1")      # nach dem Umzug
+    result = db.conn.execute("SELECT ts_utc, room FROM manual_actions ORDER BY ts_utc").fetchall()
+    assert [r["room"] for r in result] == ["buero", "flur"]
+
+
+def test_room_falls_back_to_entity_room_without_room_map(db: Database):
+    db.upsert_entity(CLIMATE, "buero", T0)
+    add(db, 0, "heat", 17, "none")
+    add(db, 20, "heat", 18, "none", user="u1")
+    (row,) = db.conn.execute("SELECT room FROM manual_actions").fetchall()
+    assert row["room"] == "buero"
+
+
 def test_entities_are_compared_separately(db: Database):
     other = EntityRule(entity_id="climate.other", kind="climate", domain="heating", attrs=("temperature", "preset_mode"))
     db.upsert_entity(CLIMATE, "buero", T0)

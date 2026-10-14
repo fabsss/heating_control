@@ -162,6 +162,8 @@ def backfill_ha_db(ha_db_path: str | Path, db: Database, rules: dict[str, Entity
             verify_integrity(src)
         for entity_id, rule in rules.items():
             db.upsert_entity(rule, rooms.get(entity_id), started)
+            if entity_id not in history_only and rooms.get(entity_id):
+                db.extend_room_to_beginning(entity_id, rooms[entity_id], rule.kind)
         filters = {entity_id: ChangeFilter(rule) for entity_id, rule in rules.items()}
         since_ts = since.timestamp() if since else None
         until_ts = until.timestamp() if until else None

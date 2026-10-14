@@ -56,7 +56,13 @@ CREATE TABLE IF NOT EXISTS ingest_runs(
 DROP VIEW IF EXISTS manual_actions;
 CREATE VIEW manual_actions AS
 WITH base AS (
-  SELECT sc.ts_utc, sc.entity_id, e.domain, e.room, sc.state AS new_state,
+  SELECT sc.ts_utc, sc.entity_id, e.domain,
+         COALESCE((SELECT rm.room FROM room_map rm
+                   WHERE rm.entity_id = sc.entity_id
+                     AND (rm.valid_from = '' OR rm.valid_from <= sc.ts_utc)
+                     AND (rm.valid_to IS NULL OR sc.ts_utc < rm.valid_to)
+                   ORDER BY rm.valid_from DESC LIMIT 1), e.room) AS room,
+         sc.state AS new_state,
          json_extract(sc.attrs, '$.temperature') AS new_temp,
          json_extract(sc.attrs, '$.preset_mode') AS new_preset,
          LAG(sc.state) OVER w AS old_state,
