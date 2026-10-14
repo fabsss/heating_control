@@ -47,6 +47,8 @@ class ContextProvider:
     Fehlende Entitäten sind kein Fehler: Die zugehörigen Werte sind `None`.
     """
 
+    signals = None                       # SignalLibrary, vom Lauf gesetzt (Modus scan, allgemeine Kandidaten)
+
     def __init__(self, pseudo: Pseudonyms, *, persons: dict[str, Timeline] | None = None,
                  flat_state: Timeline | None = None, in_bed: Timeline | None = None,
                  office_day: Timeline | None = None, outside_temp: Timeline | None = None,

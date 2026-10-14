@@ -338,3 +338,96 @@ def test_only_periods_with_interventions_in_the_room_are_evaluated(acfg):
     assert result.metrics["ausloesungen"] == 12.0          # 10 im ersten Block, 2 um den Einzeleingriff
     unfiltered = backtester(no_gap_filter(acfg), block).evaluate(rule(time_rule()))
     assert unfiltered.metrics["ausloesungen"] == 30.0
+
+
+# --- Allgemeine Signal-Auslöser und -Bedingungen ------------------------------------------
+
+def signal(handle, value_kind, points, **info):
+    from analysis.signals import Signal, SignalInfo
+    return Signal(SignalInfo(handle, value_kind, "Test", **info), f"x.{handle}", "env", None, Timeline(points))
+
+
+def presence_signal():
+    points = []
+    for n in range(42):
+        points.append((local_utc(day(n), "07:00"), "away"))
+        if day(n).weekday() < 5:
+            points += [(local_utc(day(n), "17:00"), "home"), (local_utc(day(n), "22:30"), "away")]
+    return signal("sig_01", "categorical", points, values=("away", "home"))
+
+
+def signal_ctx(*signals):
+    from analysis.signals import SignalLibrary
+    ctx = ContextProvider.empty()
+    ctx.signals = SignalLibrary(list(signals))
+    return ctx
+
+
+def arrival_trigger(**extra):
+    return {"type": "signal", "signal": "sig_01", "event": "to_state", "value": "home", "offset_min": 0, **extra}
+
+
+def test_signal_trigger_matches_interventions_after_the_event(acfg):
+    result = backtester(acfg, weekday_interventions("17:12"), signal_ctx(presence_signal())).evaluate(rule(arrival_trigger()))
+    assert result.status == STATUS_PASSED
+    assert result.metrics["ausloesungen"] == 30.0 and result.metrics["faelle"] == 30.0
+    assert result.metrics["abdeckung"] == 1.0 and result.metrics["fehlausloesungen"] == 0.0
+
+
+def test_duration_of_the_previous_state_filters_events(acfg):
+    ctx = signal_ctx(presence_signal())
+    long_ones = backtester(acfg, weekday_interventions("17:12"), ctx).evaluate(rule(arrival_trigger(min_prev_min=180)))
+    assert long_ones.metrics["ausloesungen"] == 30.0
+    short_ones = backtester(acfg, weekday_interventions("17:12"), ctx).evaluate(rule(arrival_trigger(max_prev_min=60)))
+    assert short_ones.metrics["ausloesungen"] == 0.0 and short_ones.status == STATUS_FEW
+
+
+def test_positive_offset_moves_the_trigger_instant(acfg):
+    result = backtester(acfg, weekday_interventions("17:12"), signal_ctx(presence_signal())).evaluate(
+        rule(arrival_trigger(offset_min=15)))
+    assert result.metrics["faelle"] == 0.0                         # der Eingriff liegt vor 17:15
+
+
+def test_alarm_time_allows_a_negative_offset(acfg):
+    alarms = [(local_utc(day(n) - timedelta(days=1), "20:00"), local_utc(day(n), "06:30").isoformat()) for n in range(42)]
+    ctx = signal_ctx(signal("sig_03", "timestamp", alarms))
+    items = [iv(n, "06:02", 21.0) for n in range(42)]        # 28 Minuten vor der Weckzeit
+    trigger = {"type": "signal", "signal": "sig_03", "event": "alarm_time", "offset_min": -30}
+    result = backtester(acfg, items, ctx, start=local_utc(day(1), "00:00")).evaluate(rule(trigger))
+    assert result.status == STATUS_PASSED and result.metrics["faelle"] == result.metrics["ausloesungen"] >= 30
+
+
+def test_unknown_or_empty_signals_make_the_candidate_untestable(acfg):
+    assert backtester(acfg, weekday_interventions()).evaluate(rule(arrival_trigger())).status == STATUS_UNTESTABLE
+    ctx = signal_ctx(presence_signal())
+    unknown = backtester(acfg, weekday_interventions(), ctx).evaluate(rule(arrival_trigger(signal="sig_99")))
+    assert unknown.status == STATUS_UNTESTABLE and unknown.note
+    empty = signal_ctx(signal("sig_01", "categorical", [], values=("away", "home")))
+    assert backtester(acfg, weekday_interventions(), empty).evaluate(rule(arrival_trigger())).status == STATUS_UNTESTABLE
+
+
+def test_signal_without_events_is_untestable(acfg):
+    flat = signal("sig_01", "categorical", [(local_utc(day(0), "07:00"), "away"), (local_utc(day(1), "07:00"), "away")],
+                  values=("away", "home"))
+    result = backtester(acfg, weekday_interventions(), signal_ctx(flat)).evaluate(rule(arrival_trigger()))
+    assert result.status == STATUS_UNTESTABLE and "Ereignisse" in result.note
+
+
+def test_signal_state_condition(acfg):
+    ctx = signal_ctx(presence_signal())
+    home = {"type": "signal_state", "signal": "sig_01", "op": "is", "value": "home"}
+    away = {**home, "op": "is_not"}
+    base = time_rule("17:30")
+    assert backtester(acfg, weekday_interventions(), ctx).evaluate(rule(base, conditions=[home])).metrics["ausloesungen"] == 30.0
+    assert backtester(acfg, weekday_interventions(), ctx).evaluate(rule(base, conditions=[away])).metrics["ausloesungen"] == 0.0
+
+
+def test_signal_range_condition_and_missing_signal(acfg):
+    points = [(local_utc(day(0), "00:00"), "5.0"), (local_utc(day(21), "00:00"), "12.0")]
+    ctx = signal_ctx(signal("sig_02", "numeric", points, low=5.0, high=12.0, terciles=(5.0, 12.0)))
+    below = {"type": "signal_range", "signal": "sig_02", "op": "below", "value": 8}
+    result = backtester(acfg, weekday_interventions(), ctx).evaluate(rule(time_rule(weekdays=range(7)), conditions=[below]))
+    assert result.metrics["ausloesungen"] == 21.0
+    missing = {**below, "signal": "sig_77"}
+    assert backtester(acfg, weekday_interventions(), ctx).evaluate(
+        rule(time_rule(), conditions=[missing])).status == STATUS_UNTESTABLE

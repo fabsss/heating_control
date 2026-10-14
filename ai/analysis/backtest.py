@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from .config import AnalysisConfig
 from .context import UNKNOWN, ContextProvider
+from .events import signal_events
 from .interventions import excluded
 from .models import (STATUS_FEW, STATUS_PASSED, STATUS_REJECTED, STATUS_UNTESTABLE, Candidate,
                      Intervention)
@@ -113,7 +114,30 @@ class Backtester:
         trigger = candidate.trigger
         if trigger["type"] == "time":
             return self._time_instants(trigger)
+        if trigger["type"] == "signal":
+            return self._signal_instants(trigger)
         return self._event_instants(trigger, candidate.room)
+
+    def _signal(self, handle: str):
+        library = getattr(self.ctx, "signals", None)
+        signal = library.get(handle) if library is not None else None
+        if signal is None or not signal.timeline:
+            raise NotTestable("Signal ohne aufgezeichnete Daten")
+        return signal
+
+    def _signal_instants(self, trigger: dict) -> list[datetime]:
+        signal = self._signal(trigger["signal"])
+        events = signal_events(signal, trigger["event"], trigger.get("value"), until=self.end)
+        if not events:
+            raise NotTestable("keine Ereignisse für das Signal")
+        low, high = trigger.get("min_prev_min"), trigger.get("max_prev_min")
+        offset = timedelta(minutes=trigger.get("offset_min", 0))
+        result = []
+        for ts, previous in events:
+            if previous is not None and ((low is not None and previous < low) or (high is not None and previous >= high)):
+                continue
+            result.append(ts + offset)
+        return result
 
     def _time_instants(self, trigger: dict) -> list[datetime]:
         hour, minute = (int(part) for part in trigger["time"].split(":"))
@@ -170,6 +194,8 @@ class Backtester:
 
     def _check_condition_data(self, candidate: Candidate) -> None:
         for condition in candidate.conditions:
+            if condition.get("type") in ("signal_state", "signal_range"):
+                self._signal(condition["signal"])
             if condition.get("type") == "outside_temp" and not self.ctx.outside_temp:
                 raise NotTestable("kein Außensensor aufgezeichnet")
             if condition.get("type") == "person_home" and not self.ctx.person_timeline(condition["person"]):
@@ -196,6 +222,18 @@ class Backtester:
             elif kind == "person_home":
                 state = self.ctx.person_timeline(condition["person"]).value_at(instant)
                 if state in UNKNOWN or (state == "home") != condition["home"]:
+                    return False
+            elif kind == "signal_state":
+                state = self._signal(condition["signal"]).timeline.value_at(instant)
+                if state is None or (state == condition["value"]) != (condition["op"] == "is"):
+                    return False
+            elif kind == "signal_range":
+                number = self._signal(condition["signal"]).timeline.numeric_at(instant)
+                if number is None:
+                    return False
+                if condition["op"] == "below" and not number < condition["value"]:
+                    return False
+                if condition["op"] == "above" and not number > condition["value"]:
                     return False
         return True
 
