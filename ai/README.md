@@ -120,3 +120,29 @@ Hinweise:
 - Ein Lauf bricht ohne Aufruf ab, wenn weniger als `min_interventions` Eingriffe im Zeitraum liegen oder das geschätzte Kostenlimit überschritten würde.
 - Kandidaten mit Status `nicht_pruefbar` nutzen etwas, das das System nicht nachrechnen kann (unbekannter Raum, fehlender Sensor); die Notiz nennt den Grund.
 - Das Ende des Ausschlusses für das Schlafzimmer in `analysis.yaml` ist das Datum des Thermostattauschs und beim Einrichten anzupassen.
+
+### Signale und automatische Voranalyse (Scan)
+
+Jede Entität mit dem Label `KI_DB_Sync` (außer den Thermostaten) ist ein **Signal** mit einer dauerhaften Kennung `sig_01`, `sig_02` …, deren Art (Kategorie, Zahl, Zeitstempel) aus den Daten erkannt wird. Der Scan prüft für jedes Signal automatisch, ob in der Nähe seiner Ereignisse auffällig oft manuell eingegriffen wird (Vergleich mit derselben Uhrzeit an anderen Tagen, Korrektur für viele Tests). Das Modell bekommt im Modus `scan` die Ergebnisse und formuliert daraus Regeln mit einem allgemeinen Vokabular (beliebiges Signal als Auslöser oder Bedingung, Versatz, Dauer des vorherigen Zustands).
+
+```bash
+docker exec home-ai-collector python -m analysis signals          # Kennungen, Art, Beschreibung, lokal die Entität
+docker exec home-ai-collector python -m analysis scan             # Assoziationen ohne Modell, mit Klarnamen lokal
+docker exec home-ai-collector python -m analysis scan --room Wohnzimmer --top 50
+docker exec home-ai-collector python -m analysis run --mode scan --dry-run
+docker exec home-ai-collector python -m analysis run --mode scan
+```
+
+Beschreibungen für das Modell stehen in `signal_labels:` in `analysis.yaml` (keine Klarnamen). Die Grenzen des Scans (`min_events`, `min_hits`, `q_max`, `top_k`, Dauerklassen) stehen unter `scan:`.
+
+**Wecker:** Die beiden `*_next_alarm`-Sensoren (Zeitstempel) liefern das Ereignis „Weckzeit erreicht“. Die beiden `*_alarmclock_triggered`-Sensoren sind Template-Sensoren aus der `configuration.yaml` und brauchen ein `unique_id`, damit sie in der Registry stehen und das Label tragen können:
+
+```yaml
+template:
+  - sensor:
+      - name: fabians_mobile_alarmclock_triggered
+        unique_id: fabians_mobile_alarmclock_triggered
+        state: "..."          # wie bisher
+```
+
+Danach Template-Entitäten neu laden, Label setzen und den Backfill der Snapshots wiederholen (idempotent).
