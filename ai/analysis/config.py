@@ -1,5 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
@@ -95,12 +97,24 @@ def _clusters(raw: dict[str, Any]) -> ClusterParams:
                          weekday_groups=groups)
 
 
-def load_analysis_config(path: str | Path) -> AnalysisConfig:
+def _env_price(env: Mapping[str, str], name: str, fallback: float) -> float:
+    value = (env.get(name) or "").strip()
+    if not value:
+        return fallback
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise AnalysisConfigError(f"{name} muss eine Zahl sein, nicht {value!r}") from exc
+
+
+def load_analysis_config(path: str | Path, env: Mapping[str, str] | None = None) -> AnalysisConfig:
+    """Umgebungsvariablen überschreiben die Datei: OPENROUTER_MODEL, OPENROUTER_PRICE_INPUT/OUTPUT."""
+    env = os.environ if env is None else env
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     _only("analysis.yaml", raw, TOP_KEYS)
-    model = raw.get("model")
+    model = (env.get("OPENROUTER_MODEL") or "").strip() or raw.get("model")
     if not model:
-        raise AnalysisConfigError("model fehlt")
+        raise AnalysisConfigError("model fehlt (analysis.yaml oder OPENROUTER_MODEL)")
     provider = dict(raw.get("provider") or {})
     if provider.get("zdr") is not True:
         raise AnalysisConfigError("provider.zdr muss true sein: Zero Data Retention ist Pflicht")
@@ -114,6 +128,8 @@ def load_analysis_config(path: str | Path) -> AnalysisConfig:
         price_input, price_output = float(price["input"]), float(price["output"])
     except (KeyError, TypeError, ValueError) as exc:
         raise AnalysisConfigError("price_per_mtok braucht input und output (Zahlen)") from exc
+    price_input = _env_price(env, "OPENROUTER_PRICE_INPUT", price_input)
+    price_output = _env_price(env, "OPENROUTER_PRICE_OUTPUT", price_output)
     context = dict(raw.get("context") or {})
     missing = CONTEXT_KEYS - set(context)
     if missing:

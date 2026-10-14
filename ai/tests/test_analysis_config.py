@@ -86,3 +86,26 @@ def test_unknown_backtest_key_raises(tmp_path):
 def test_weekday_group_out_of_range_raises(tmp_path):
     with pytest.raises(AnalysisConfigError, match="weekday_groups"):
         load_analysis_config(write(tmp_path, MINIMAL + "clusters:\n  weekday_groups: {x: [7]}\n"))
+
+
+def test_env_overrides_model_and_prices(tmp_path):
+    env = {"OPENROUTER_MODEL": "vendor/other", "OPENROUTER_PRICE_INPUT": "0.5", "OPENROUTER_PRICE_OUTPUT": "2.5"}
+    cfg = load_analysis_config(write(tmp_path, MINIMAL), env=env)
+    assert cfg.model == "vendor/other"
+    assert (cfg.price_input, cfg.price_output) == (0.5, 2.5)
+
+
+def test_env_model_replaces_missing_model_in_file(tmp_path):
+    text = MINIMAL.replace("model: test/model\n", "")
+    cfg = load_analysis_config(write(tmp_path, text), env={"OPENROUTER_MODEL": "vendor/x"})
+    assert cfg.model == "vendor/x"
+
+
+def test_empty_env_values_are_ignored(tmp_path):
+    cfg = load_analysis_config(write(tmp_path, MINIMAL), env={"OPENROUTER_MODEL": "  ", "OPENROUTER_PRICE_INPUT": ""})
+    assert cfg.model == "test/model" and cfg.price_input == 1.0
+
+
+def test_invalid_env_price_raises(tmp_path):
+    with pytest.raises(AnalysisConfigError, match="OPENROUTER_PRICE_INPUT"):
+        load_analysis_config(write(tmp_path, MINIMAL), env={"OPENROUTER_PRICE_INPUT": "teuer"})
