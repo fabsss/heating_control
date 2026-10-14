@@ -49,6 +49,8 @@ def _cmd_run(cfg, db: Database, args) -> int:
     start, end = _period(args)
     cfg = asyncio.run(with_live_prices(cfg))
     source = {"openrouter": "OpenRouter", "env": "Umgebungsvariablen", "datei": "analysis.yaml"}[cfg.price_source]
+    model_source = "Umgebungsvariable OPENROUTER_MODEL" if cfg.model_source == "env" else "analysis.yaml"
+    print(f"Modell: {cfg.model} ({model_source})", file=sys.stderr)
     print(f"Preise: {cfg.price_input:.2f} / {cfg.price_output:.2f} USD je Million Token ({source})", file=sys.stderr)
     if args.dry_run:
         prepared = prepare(db, cfg, args.mode, start=start, end=end)

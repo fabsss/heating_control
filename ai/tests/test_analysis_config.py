@@ -115,3 +115,9 @@ def test_price_source_reflects_env_override(tmp_path):
     assert load_analysis_config(write(tmp_path, MINIMAL), env={}).price_source == "datei"
     cfg = load_analysis_config(write(tmp_path, MINIMAL), env={"OPENROUTER_PRICE_OUTPUT": "3"})
     assert cfg.price_source == "env"
+
+
+def test_model_source_reflects_env(tmp_path):
+    assert load_analysis_config(write(tmp_path, MINIMAL), env={}).model_source == "datei"
+    cfg = load_analysis_config(write(tmp_path, MINIMAL), env={"OPENROUTER_MODEL": "v/m"})
+    assert cfg.model_source == "env"

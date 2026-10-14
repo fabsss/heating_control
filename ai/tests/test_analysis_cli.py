@@ -192,6 +192,7 @@ async def test_dry_run_uses_openrouter_prices_and_reports_the_source(files, fake
     assert await cli(files, "run", "--mode", "weekly", "--dry-run") == 0
     captured = capsys.readouterr()
     assert "Preise: 1.00 / 2.00 USD je Million Token (OpenRouter)" in captured.err
+    assert f"Modell: {model} (analysis.yaml)" in captured.err
     assert "kein Aufruf" in captured.out
 
 
@@ -207,3 +208,12 @@ async def test_env_prices_win_over_openrouter(files, fake_llm, capsys, monkeypat
 async def test_unknown_model_falls_back_to_file_prices(files, fake_llm, capsys):
     assert await cli(files, "run", "--mode", "weekly", "--dry-run") == 0
     assert "(analysis.yaml)" in capsys.readouterr().err
+
+
+async def test_model_from_environment_is_shown_with_its_source(files, fake_llm, capsys, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_MODEL", "google/gemma-test")
+    fake_llm.models = [{"id": "google/gemma-test", "pricing": {"prompt": "0.0000001", "completion": "0.0000002"}}]
+    assert await cli(files, "run", "--mode", "weekly", "--dry-run") == 0
+    err = capsys.readouterr().err
+    assert "Modell: google/gemma-test (Umgebungsvariable OPENROUTER_MODEL)" in err
+    assert "Preise: 0.10 / 0.20 USD je Million Token (OpenRouter)" in err

@@ -74,6 +74,7 @@ class AnalysisConfig:
     clusters: ClusterParams
     backtest: BacktestParams
     price_source: str = "datei"             # datei | env | openrouter
+    model_source: str = "datei"             # datei | env
 
 
 def _only(where: str, data: dict, allowed: set[str]) -> None:
@@ -113,7 +114,8 @@ def load_analysis_config(path: str | Path, env: Mapping[str, str] | None = None)
     env = os.environ if env is None else env
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     _only("analysis.yaml", raw, TOP_KEYS)
-    model = (env.get("OPENROUTER_MODEL") or "").strip() or raw.get("model")
+    env_model = (env.get("OPENROUTER_MODEL") or "").strip()
+    model = env_model or raw.get("model")
     if not model:
         raise AnalysisConfigError("model fehlt (analysis.yaml oder OPENROUTER_MODEL)")
     provider = dict(raw.get("provider") or {})
@@ -168,4 +170,5 @@ def load_analysis_config(path: str | Path, env: Mapping[str, str] | None = None)
         clusters=_clusters(dict(raw.get("clusters") or {})),
         backtest=BacktestParams(**backtest_raw),
         price_source="env" if from_env else "datei",
+        model_source="env" if env_model else "datei",
     )
