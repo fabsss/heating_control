@@ -15,6 +15,7 @@ class Database:
     def __init__(self, path: str | Path):
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
+        self.enriched = 0          # Zeilen, denen nachträglich Kontext ergänzt wurde
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -159,6 +160,7 @@ class Database:
             inserted = self.conn.total_changes - before
             # Eine Zeile ohne Kontext (z. B. aus der History-API) bekommt den Kontext nachgetragen,
             # wenn dieselbe Änderung mit Kontext eintrifft; vorhandener Kontext bleibt unverändert.
+            before_update = self.conn.total_changes
             self.conn.executemany(
                 """
                 UPDATE state_changes SET context_id = ?, context_user_id = ?, context_parent_id = ?
@@ -168,6 +170,7 @@ class Database:
                 [(row[5], row[6], row[7], row[1], row[0], row[2], row[4])
                  for row in rows if row[5] or row[6] or row[7]],
             )
+            self.enriched += self.conn.total_changes - before_update
             for entity_id, stamp in first_seen.items():
                 self.conn.execute(
                     "UPDATE entities SET tracked_since = ? "

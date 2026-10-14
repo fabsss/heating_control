@@ -87,7 +87,7 @@ def _cmd_backfill(cfg: Config, args: argparse.Namespace) -> int:
     finally:
         db.close()
     print(f"Gelesen: {result.rows_read}, neu gespeichert: {result.rows_inserted}, "
-          f"Zeitraum: {result.first_ts} bis {result.last_ts}")
+          f"Kontext ergänzt: {result.rows_enriched}, Zeitraum: {result.first_ts} bis {result.last_ts}")
     return 0
 
 

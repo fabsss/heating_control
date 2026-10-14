@@ -121,6 +121,25 @@ def test_backfilled_user_change_shows_up_in_manual_actions(cfg, db, tmp_path):
         "manual", USER_FABIAN, "temperature")
 
 
+def test_backfill_reports_rows_that_only_got_their_context_added(cfg, db, tmp_path):
+    ha = build_ha_db(tmp_path / "home-assistant_v2.db", [
+        row("climate.bt", "heat", 1767261600.0, CLIMATE_ATTRS),
+        row("climate.bt", "heat", 1767261720.0, {**CLIMATE_ATTRS, "temperature": 21}, ctx=CTX, user=USER_FABIAN),
+    ])
+    rules = rules_for(cfg, "climate.bt")
+    from collector.models import Change
+    db.upsert_entity(rules["climate.bt"], "buero", datetime(2026, 1, 1, tzinfo=timezone.utc))
+    db.insert_changes([                                       # wie aus dem Lückenabgleich: ohne Kontext
+        Change(datetime.fromtimestamp(1767261720.0, tz=timezone.utc), "climate.bt", "heat",
+               {"temperature": 21, "preset_mode": "none", "hvac_action": "idle",
+                "current_temperature": 20.0, "window_open": False}),
+    ], "gap:history_api")
+    result = backfill_ha_db(ha, db, rules, {"climate.bt": "buero"})
+    assert (result.rows_inserted, result.rows_enriched) == (1, 1)
+    again = backfill_ha_db(ha, db, rules, {"climate.bt": "buero"})
+    assert (again.rows_inserted, again.rows_enriched) == (0, 0)
+
+
 def test_backfill_gives_labeled_entities_their_room_since_the_beginning(cfg, db, tmp_path):
     ha = build_ha_db(tmp_path / "home-assistant_v2.db", [
         row("climate.bt", "heat", 1767261600.0, CLIMATE_ATTRS),

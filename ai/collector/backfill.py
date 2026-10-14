@@ -40,6 +40,7 @@ class BackfillResult:
     rows_inserted: int
     first_ts: str | None
     last_ts: str | None
+    rows_enriched: int = 0
 
 
 @dataclass(frozen=True)
@@ -167,6 +168,7 @@ def backfill_ha_db(ha_db_path: str | Path, db: Database, rules: dict[str, Entity
         filters = {entity_id: ChangeFilter(rule) for entity_id, rule in rules.items()}
         since_ts = since.timestamp() if since else None
         until_ts = until.timestamp() if until else None
+        enriched_before = db.enriched
         rows_read = inserted = 0
         first_ts = last_ts = None
         last_by_entity: dict[str, datetime] = {}
@@ -197,7 +199,7 @@ def backfill_ha_db(ha_db_path: str | Path, db: Database, rules: dict[str, Entity
         for entity_id in history_only:
             db.mark_inactive(entity_id, last_by_entity.get(entity_id) or started)
         db.record_run(source, first_ts, last_ts, inserted, "ok", to_utc_iso(started))
-        return BackfillResult(rows_read, inserted, first_ts, last_ts)
+        return BackfillResult(rows_read, inserted, first_ts, last_ts, db.enriched - enriched_before)
     finally:
         src.close()
 
