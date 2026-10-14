@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from collector.db import Database
@@ -11,16 +11,19 @@ from collector.models import to_utc_iso, utcnow
 from .backtest import Backtester, BacktestResult
 from .config import AnalysisConfig
 from .context import ContextProvider
+from .generic import generic_vocabulary_text
 from .features import build_clusters, build_weekly, data_period, known_presets, room_name
 from .interventions import load_interventions
 from .llm import request_candidates
-from .models import STATUS_OPEN, STATUS_UNTESTABLE, Intervention
+from .models import STATUS_OPEN, STATUS_UNTESTABLE, Association, Intervention
 from .prompts import build_messages
 from .pseudonym import Pseudonyms, build_pseudonyms
+from .scan import association_row, run_scan
+from .signals import SignalLibrary
 from .store import Store
 from .vocabulary import ParseContext, parse_candidates, vocabulary_text
 
-MODES = ("weekly", "clusters")
+MODES = ("weekly", "clusters", "scan")
 
 
 class AnalysisError(Exception):
@@ -47,6 +50,7 @@ class Environment:
     pseudo: Pseudonyms
     ctx: ContextProvider
     interventions: list[Intervention]
+    signals: SignalLibrary | None = None
 
 
 @dataclass
@@ -56,6 +60,7 @@ class Prepared:
     data: dict
     messages: list[dict]
     parse_ctx: ParseContext
+    associations: list[Association] = field(default_factory=list)
 
 
 @dataclass
@@ -76,8 +81,10 @@ def load_environment(db: Database, cfg: AnalysisConfig, start: datetime | None =
         raise NothingToAnalyze("Die Datenbank enthält keine Zustandsänderungen.")
     start, end = start or period[0], end or period[1]
     pseudo = build_pseudonyms(db)
-    return Environment(start, end, pseudo, ContextProvider.from_db(db, cfg, pseudo),
-                       load_interventions(db, cfg, start=start, end=end))
+    ctx = ContextProvider.from_db(db, cfg, pseudo)
+    library = SignalLibrary.from_db(db, cfg, pseudo)
+    ctx.signals = library
+    return Environment(start, end, pseudo, ctx, load_interventions(db, cfg, start=start, end=end), library)
 
 
 def prepare(db: Database, cfg: AnalysisConfig, mode: str, *, start: datetime | None = None,
@@ -87,8 +94,18 @@ def prepare(db: Database, cfg: AnalysisConfig, mode: str, *, start: datetime | N
     env = load_environment(db, cfg, start, end)
     if len(env.interventions) < cfg.min_interventions:
         raise TooFewInterventions(len(env.interventions), cfg.min_interventions)
+    associations: list[Association] = []
     if mode == "weekly":
         data = build_weekly(env.interventions, env.ctx, cfg, env.pseudo, env.start, env.end)
+    elif mode == "scan":
+        associations = run_scan(cfg, env.signals, env.interventions, env.start, env.end)
+        if not associations:
+            raise NothingToAnalyze(
+                "Der Scan fand keine auffälligen Zusammenhänge (Grenzen unter scan: in analysis.yaml).")
+        weekly = build_weekly(env.interventions, env.ctx, cfg, env.pseudo, env.start, env.end)
+        data = {"zeitraum": weekly["zeitraum"], "signale": env.signals.catalog(),
+                "assoziationen": [association_row(item, cfg) for item in associations[:cfg.scan.top_k]],
+                "wochenraster": {key: value for key, value in weekly.items() if key != "zeitraum"}}
     else:
         data = build_clusters(env.interventions, env.ctx, cfg, env.pseudo, env.start, env.end)
         if not data["cluster"]:
@@ -97,14 +114,18 @@ def prepare(db: Database, cfg: AnalysisConfig, mode: str, *, start: datetime | N
     rooms = {room_name(cfg, area): area for area in {item.room for item in env.interventions}}
     presets = known_presets(db) | {str(item.value) for item in env.interventions if item.kind == "preset"}
     flat_states = env.ctx.flat_state.states()
+    scanning = mode == "scan"
     parse_ctx = ParseContext(rooms=rooms, pseudo=env.pseudo, presets=frozenset(presets),
-                             flat_states=frozenset(flat_states))
-    messages = build_messages(mode, data, vocabulary_text(), cfg.max_candidates, presets=sorted(presets),
+                             flat_states=frozenset(flat_states),
+                             signals=env.signals.infos() if scanning else {},
+                             max_conditions=2 if scanning else None)
+    vocabulary = generic_vocabulary_text() if scanning else vocabulary_text()
+    messages = build_messages(mode, data, vocabulary, cfg.max_candidates, presets=sorted(presets),
                               flat_states=sorted(flat_states), rooms=sorted(rooms))
     leaks = env.pseudo.leaks("\n".join(message["content"] for message in messages))
     if leaks:
         raise PrivacyLeak(f"Der zu sendende Text enthält schützenswerte Begriffe: {', '.join(leaks)}")
-    return Prepared(mode, env, data, messages, parse_ctx)
+    return Prepared(mode, env, data, messages, parse_ctx, associations)
 
 
 async def run_analysis(db: Database, cfg: AnalysisConfig, mode: str, *, api_key: str,
@@ -122,6 +143,7 @@ async def run_analysis(db: Database, cfg: AnalysisConfig, mode: str, *, api_key:
     run_id = store.start_run(mode, cfg.model, params, now())
     try:
         raws, result = await completer(cfg, prepared.messages, api_key)
+        store.save_associations(run_id, prepared.associations)
         candidates = parse_candidates(raws, prepared.parse_ctx)
         tester = Backtester(cfg, env.interventions, env.ctx, env.start, env.end)
         counts: Counter[str] = Counter()

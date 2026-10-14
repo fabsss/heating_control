@@ -27,6 +27,16 @@ MODE_INTROS = {
         "wurde, welche Aktion am häufigsten war und welche Personen dabei zu Hause waren; dazu je Wochentag "
         "den durchschnittlichen Wohnungszustand und die Anwesenheit. Suche selbst nach Mustern."
     ),
+    "scan": (
+        "Modus: Scan. Die Daten enthalten den Signalkatalog (sig_NN mit Beschreibung), die Assoziationen und das "
+        "Wochenraster. Eine Assoziation sagt: Um dieses Ereignis herum (fenster_min in Minuten, negativ = davor) "
+        "wurde in dem Raum bei mit_eingriff von ereignisse Ereignissen manuell eingegriffen, an Kontrolltagen zur "
+        "selben Uhrzeit nur bei kontrolle_anteil; lift ist das Verhältnis, q die korrigierte Irrtumswahrscheinlichkeit. "
+        "Formuliere daraus Regeln: Auslöser ist das Ereignis (mit offset_min und gegebenenfalls min_prev_min), "
+        "Aktion ist die typische Aktion. Belege jede Regel mit mindestens einer Assoziation oder dem Raster; "
+        "reine Zeitgewohnheiten aus dem Raster sind als time-Auslöser zulässig. Nutze Bedingungen nur, wenn sie "
+        "die Auslösung erkennbar eingrenzen. Nenne in der Hypothese die vermutete Ursache."
+    ),
     "clusters": (
         "Modus: Cluster. Die Daten zeigen gebündelte Eingriffe (gleicher Raum, gleiche Aktion, ähnliche "
         "Uhrzeit, gleiche Wochentagsgruppe) mit dem Kontext zum Zeitpunkt der Eingriffe als Anteile. "
