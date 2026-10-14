@@ -36,8 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
     listing.add_argument("--run", dest="run_id", type=int)
     listing.add_argument("--status", choices=STATUSES)
     presence = sub.add_parser("presence", help="Anwesenheit und manuelle Eingriffe gegenüberstellen")
-    presence.add_argument("--min-away", type=int, default=120,
-                          help="Minuten, die der vorherige Zustand mindestens galt (Standard 120)")
+    presence.add_argument("--classes", default="45,180",
+                          help="Grenzen der Abwesenheitsklassen in Minuten, Komma getrennt (Standard 45,180)")
     backtest = sub.add_parser("backtest", help="Backtest eines Kandidaten erneut rechnen")
     backtest.add_argument("candidate_id", type=int)
     backtest.add_argument("--from", dest="since")
@@ -131,7 +131,13 @@ def _cmd_list(cfg, db: Database, store: Store, args) -> int:
 
 
 def _cmd_presence(cfg, db: Database, args) -> int:
-    print(render_presence(analyze_presence(db, cfg, min_state_min=args.min_away)))
+    try:
+        edges = tuple(sorted({int(part) for part in args.classes.split(",") if part.strip()}))
+    except ValueError as exc:
+        raise AnalysisError(f"--classes erwartet Zahlen, nicht {args.classes!r}") from exc
+    if not edges or edges[0] <= 0:
+        raise AnalysisError("--classes braucht mindestens eine positive Zahl")
+    print(render_presence(analyze_presence(db, cfg, edges=edges)))
     return 0
 
 

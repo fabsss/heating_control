@@ -100,7 +100,7 @@ Zusammenhang zwischen Anwesenheit und Eingriffen (lokal, ohne LLM, zeigt Klarnam
 docker exec home-ai-collector python -m analysis presence
 ```
 
-Der Bericht zeigt (1) für Ankünfte und Abgänge jeder Person einen Zeitstrahl von zwei Stunden davor bis zwei Stunden danach in 30-Minuten-Abschnitten: bei wie viel Prozent der Ereignisse gab es in dem Abschnitt einen Eingriff, verglichen mit derselben Uhrzeit an anderen Tagen ohne Ereignis (Kontrolle). So sieht man auch Vorheizen vor der Ankunft. Gezählt werden nur Wechsel, vor denen der Zustand mindestens `--min-away` Minuten galt (Standard 120); das filtert das Springen zwischen zu Hause und unterwegs. (2) Die Zeit seit der letzten Ankunft bei Eingriffen im Vergleich zu zufälligen Zeitpunkten.
+Der Bericht zeigt (1) einen Zeitstrahl um jede Ankunft (zwei Stunden davor bis zwei Stunden danach, 30-Minuten-Abschnitte): bei wie viel Prozent der Ankünfte gab es in dem Abschnitt einen Eingriff, verglichen mit derselben Uhrzeit an anderen Tagen ohne Ankunft (Kontrolle). Die Ankünfte sind nach der Dauer der Abwesenheit davor getrennt (`--classes 45,180`: unter 45 min, 45 bis 180 min, ab 180 min), denn ein Gassi-Gang löst etwas anderes aus als die Heimkehr von der Arbeit. Vorheizen vor der Ankunft zeigt sich in den Abschnitten vor 0. (2) Die Zeit seit der letzten Ankunft bei Eingriffen im Vergleich zu zufälligen Zeitpunkten.
 
 Die Regeln liegen in `config/analysis.yaml` (Modell, Kostenlimit, Schwellen des Backtests, Ausschlüsse, Raumnamen) und sind ins Image eingebaut; nach einer Änderung das Image neu bauen. Der Schlüssel steht nie in einer Datei. Zugangsdaten und Modell kommen aus Umgebungsvariablen:
 

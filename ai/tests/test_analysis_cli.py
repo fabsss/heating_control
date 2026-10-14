@@ -222,5 +222,11 @@ async def test_model_from_environment_is_shown_with_its_source(files, fake_llm, 
 async def test_presence_command_prints_the_correlation_report(files, capsys):
     assert await cli(files, "presence") == 0
     out = capsys.readouterr().out
-    assert "Ankünfte und Abgänge" in out and "Zeit seit der letzten Ankunft" in out
+    assert "Ankünfte nach Dauer der Abwesenheit" in out and "Zeit seit der letzten Ankunft" in out
     assert "Svenja" in out
+
+
+async def test_presence_classes_option_changes_the_columns_and_rejects_nonsense(files, capsys):
+    assert await cli(files, "presence", "--classes", "30,60") == 0
+    assert "Svenja ≥60" in capsys.readouterr().out
+    assert await cli(files, "presence", "--classes", "abc") == 2
