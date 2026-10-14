@@ -73,3 +73,34 @@ Wiederherstellen: Kopie nach `/mnt/data/nobackup/homeassistant/ai/home_ai.sqlite
 - Zeitstempel sind UTC.
 - Lücken (Verbindungsabbruch, Neustart) werden aus der History-API von Home Assistant nachgeholt, höchstens 180 Tage zurück. Diese Zeilen haben `source = 'gap:history_api'` und tragen keinen Benutzerkontext, daher erscheinen manuelle Eingriffe während einer Lücke nicht in `manual_actions`.
 - Tokens und Backups gehören nicht ins Repository.
+
+## Analyse (Teilprojekt 2)
+
+Erzeugt aus den manuellen Eingriffen Regelkandidaten (Zeit- oder Ereignisauslöser), lässt ein LLM über OpenRouter (mit Zero Data Retention) Hypothesen formulieren und prüft jeden Kandidaten gegen die Historie. Nichts im Haus ändert sich dadurch; die Kandidaten sind Vorschläge. Spezifikation: `docs/superpowers/specs/2026-10-13-home-ai-analysis-design.md`.
+
+Zwei umschaltbare Verfahren: `weekly` (das Modell sucht Muster im Wochenraster) und `clusters` (ein deterministischer Schritt bündelt Eingriffe samt Kontext, das Modell formuliert die Ursache). Backtest und Speicherung sind identisch, so lassen sich beide vergleichen.
+
+Alle Befehle laufen im Image des Collectors und lesen die Datenbank unter `/data`:
+
+```bash
+# Vorab: was würde gesendet? (kein Aufruf, kostenlos)
+docker run --rm -v /mnt/data/nobackup/homeassistant/ai:/data home-ai-collector \
+  python -m analysis run --mode weekly --dry-run
+
+# Lauf (OPENROUTER_API_KEY vorher in der Shell setzen: read -s OPENROUTER_API_KEY; export OPENROUTER_API_KEY)
+docker run --rm -e OPENROUTER_API_KEY -v /mnt/data/nobackup/homeassistant/ai:/data home-ai-collector \
+  python -m analysis run --mode weekly
+
+# Vergleichen und ansehen
+docker run --rm -v /mnt/data/nobackup/homeassistant/ai:/data home-ai-collector python -m analysis compare
+docker run --rm -v /mnt/data/nobackup/homeassistant/ai:/data home-ai-collector python -m analysis list --status bestanden
+```
+
+Die Regeln liegen in `config/analysis.yaml` (Modell, Kostenlimit, Schwellen des Backtests, Ausschlüsse, Raumnamen) und sind ins Image eingebaut; nach einer Änderung das Image neu bauen. Der Schlüssel steht nie in einer Datei.
+
+Hinweise:
+
+- Das Modell sieht nur verdichtete Muster. Personen sind `person_1`, `person_2`; Räume stehen im Klartext. `--dry-run` zeigt den vollständigen Text.
+- Ein Lauf bricht ohne Aufruf ab, wenn weniger als `min_interventions` Eingriffe im Zeitraum liegen oder das geschätzte Kostenlimit überschritten würde.
+- Kandidaten mit Status `nicht_pruefbar` nutzen etwas, das das System nicht nachrechnen kann (unbekannter Raum, fehlender Sensor); die Notiz nennt den Grund.
+- Das Ende des Ausschlusses für das Schlafzimmer in `analysis.yaml` ist das Datum des Thermostattauschs und beim Einrichten anzupassen.

@@ -1,6 +1,6 @@
 # KI-Analyse: Regelkandidaten aus dem Heizverhalten – Teilprojekt 2
 
-Stand: 2026-10-13 · Status: Entwurf zur Freigabe
+Stand: 2026-10-13 · Status: Entwurf freigegeben
 
 ## 1. Einordnung
 
@@ -134,6 +134,8 @@ pseudonyms(alias, entity_id, kind)
 ```
 
 `trigger`, `conditions` und `action` sind JSON. Prompt und Antwort werden pseudonymisiert gespeichert, damit ein Lauf nachvollziehbar bleibt.
+
+**Umsetzung, Abweichungen:** Die Spalten heißen `trigger_json`, `conditions_json` und `action_json` (`TRIGGER` ist ein SQL-Schlüsselwort). Zusätzlich gibt es `candidates.note` (Grund für `nicht_pruefbar`, `zu_wenig_belege`, `abgelehnt`) und `analysis_runs.error`. Räume stehen in der Datenbank als `area_id`; die Klartextnamen für das Modell kommen aus `room_names` in `analysis.yaml`.
 
 ## 9. Kommandos und Konfiguration
 
