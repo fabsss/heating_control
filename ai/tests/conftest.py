@@ -60,6 +60,7 @@ async def fake_llm():
     fake = FakeOpenRouter()
     app = web.Application()
     app.router.add_post("/api/v1/chat/completions", fake.handler)
+    app.router.add_get("/api/v1/models", fake.models_handler)
     server = TestServer(app)
     await server.start_server()
     fake.url = f"http://127.0.0.1:{server.port}/api/v1/chat/completions"

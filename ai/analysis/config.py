@@ -73,6 +73,7 @@ class AnalysisConfig:
     context: dict[str, str]
     clusters: ClusterParams
     backtest: BacktestParams
+    price_source: str = "datei"             # datei | env | openrouter
 
 
 def _only(where: str, data: dict, allowed: set[str]) -> None:
@@ -128,6 +129,7 @@ def load_analysis_config(path: str | Path, env: Mapping[str, str] | None = None)
         price_input, price_output = float(price["input"]), float(price["output"])
     except (KeyError, TypeError, ValueError) as exc:
         raise AnalysisConfigError("price_per_mtok braucht input und output (Zahlen)") from exc
+    from_env = any((env.get(name) or "").strip() for name in ("OPENROUTER_PRICE_INPUT", "OPENROUTER_PRICE_OUTPUT"))
     price_input = _env_price(env, "OPENROUTER_PRICE_INPUT", price_input)
     price_output = _env_price(env, "OPENROUTER_PRICE_OUTPUT", price_output)
     context = dict(raw.get("context") or {})
@@ -165,4 +167,5 @@ def load_analysis_config(path: str | Path, env: Mapping[str, str] | None = None)
         context={key: str(value) for key, value in context.items()},
         clusters=_clusters(dict(raw.get("clusters") or {})),
         backtest=BacktestParams(**backtest_raw),
+        price_source="env" if from_env else "datei",
     )

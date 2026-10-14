@@ -109,3 +109,9 @@ def test_empty_env_values_are_ignored(tmp_path):
 def test_invalid_env_price_raises(tmp_path):
     with pytest.raises(AnalysisConfigError, match="OPENROUTER_PRICE_INPUT"):
         load_analysis_config(write(tmp_path, MINIMAL), env={"OPENROUTER_PRICE_INPUT": "teuer"})
+
+
+def test_price_source_reflects_env_override(tmp_path):
+    assert load_analysis_config(write(tmp_path, MINIMAL), env={}).price_source == "datei"
+    cfg = load_analysis_config(write(tmp_path, MINIMAL), env={"OPENROUTER_PRICE_OUTPUT": "3"})
+    assert cfg.price_source == "env"

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import asyncio
@@ -11,7 +11,7 @@ from collector.models import parse_utc
 
 from .candidates import describe, signature
 from .config import AnalysisConfigError, load_analysis_config
-from .llm import LlmError, estimate_cost
+from .llm import LlmError, estimate_cost, with_live_prices
 from .pseudonym import build_pseudonyms
 from .runner import MODES, AnalysisError, backtest_candidate, prepare, run_analysis
 from .store import Store
@@ -47,6 +47,9 @@ def _period(args) -> tuple:
 
 def _cmd_run(cfg, db: Database, args) -> int:
     start, end = _period(args)
+    cfg = asyncio.run(with_live_prices(cfg))
+    source = {"openrouter": "OpenRouter", "env": "Umgebungsvariablen", "datei": "analysis.yaml"}[cfg.price_source]
+    print(f"Preise: {cfg.price_input:.2f} / {cfg.price_output:.2f} USD je Million Token ({source})", file=sys.stderr)
     if args.dry_run:
         prepared = prepare(db, cfg, args.mode, start=start, end=end)
         for message in prepared.messages:

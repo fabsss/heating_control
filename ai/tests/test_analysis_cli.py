@@ -184,3 +184,26 @@ def test_signature_ignores_conditions_and_rounds_time_and_setpoint():
     d = candidate({"type": "event", "event": "person_arrives", "person": "person.svenja"})
     assert signature(d) != signature(a)
     assert signature(candidate({}, status=STATUS_UNTESTABLE)) is None
+
+
+async def test_dry_run_uses_openrouter_prices_and_reports_the_source(files, fake_llm, capsys):
+    model = yaml.safe_load((ROOT / "config" / "analysis.yaml").read_text(encoding="utf-8"))["model"]
+    fake_llm.models = [{"id": model, "pricing": {"prompt": "0.000001", "completion": "0.000002"}}]
+    assert await cli(files, "run", "--mode", "weekly", "--dry-run") == 0
+    captured = capsys.readouterr()
+    assert "Preise: 1.00 / 2.00 USD je Million Token (OpenRouter)" in captured.err
+    assert "kein Aufruf" in captured.out
+
+
+async def test_env_prices_win_over_openrouter(files, fake_llm, capsys, monkeypatch):
+    model = yaml.safe_load((ROOT / "config" / "analysis.yaml").read_text(encoding="utf-8"))["model"]
+    fake_llm.models = [{"id": model, "pricing": {"prompt": "0.000001", "completion": "0.000002"}}]
+    monkeypatch.setenv("OPENROUTER_PRICE_INPUT", "7")
+    monkeypatch.setenv("OPENROUTER_PRICE_OUTPUT", "8")
+    assert await cli(files, "run", "--mode", "weekly", "--dry-run") == 0
+    assert "Preise: 7.00 / 8.00 USD je Million Token (Umgebungsvariablen)" in capsys.readouterr().err
+
+
+async def test_unknown_model_falls_back_to_file_prices(files, fake_llm, capsys):
+    assert await cli(files, "run", "--mode", "weekly", "--dry-run") == 0
+    assert "(analysis.yaml)" in capsys.readouterr().err

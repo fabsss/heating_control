@@ -1,10 +1,11 @@
-import json
+﻿import json
 from dataclasses import replace
 
 import pytest
 
 from analysis.llm import (CostLimitExceeded, InvalidResponse, LlmError, ZdrUnavailable, complete,
-                          estimate_cost, parse_candidates_json, request_candidates)
+                          estimate_cost, fetch_pricing, parse_candidates_json, request_candidates,
+                          with_live_prices)
 from analysis.prompts import build_messages
 
 MESSAGES = [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}]
@@ -150,3 +151,44 @@ async def test_cost_limit_counts_what_the_first_attempt_already_cost(acfg, fake_
 def test_estimate_cost_uses_prices_and_output_limit(acfg):
     cost = estimate_cost([{"role": "user", "content": "x" * 3000}], acfg)
     assert cost == pytest.approx(1000 * 3.0 / 1e6 + acfg.max_output_tokens * 15.0 / 1e6)
+
+
+# --- Preise von OpenRouter ----------------------------------------------------------
+
+def listing(model="test/model", prompt="0.000002", completion="0.00001"):
+    return [{"id": "other/m", "pricing": {"prompt": "1", "completion": "1"}},
+            {"id": model, "pricing": {"prompt": prompt, "completion": completion}}]
+
+
+async def test_fetch_pricing_reads_usd_per_million_tokens(acfg, fake_llm):
+    fake_llm.models = listing("test/model")
+    cfg = config(acfg, fake_llm, model="test/model")
+    assert await fetch_pricing(cfg) == pytest.approx((2.0, 10.0))
+
+
+async def test_fetch_pricing_returns_none_for_unknown_model_or_errors(acfg, fake_llm):
+    fake_llm.models = listing("test/model")
+    assert await fetch_pricing(config(acfg, fake_llm, model="gibt/es-nicht")) is None
+    fake_llm.models_status = 500
+    assert await fetch_pricing(config(acfg, fake_llm, model="test/model")) is None
+    assert await fetch_pricing(replace(acfg, openrouter_url="http://127.0.0.1:9/api/v1/chat/completions")) is None
+
+
+async def test_fetch_pricing_ignores_unusable_prices(acfg, fake_llm):
+    fake_llm.models = listing("test/model", prompt="-1", completion="abc")
+    assert await fetch_pricing(config(acfg, fake_llm, model="test/model")) is None
+
+
+async def test_with_live_prices_uses_openrouter_unless_env_set(acfg, fake_llm):
+    fake_llm.models = listing("test/model")
+    live = await with_live_prices(config(acfg, fake_llm, model="test/model"))
+    assert (live.price_input, live.price_output, live.price_source) == (pytest.approx(2.0), pytest.approx(10.0), "openrouter")
+    pinned = config(acfg, fake_llm, model="test/model", price_source="env", price_input=9.0)
+    assert await with_live_prices(pinned) == pinned
+
+
+async def test_with_live_prices_falls_back_to_file_values(acfg, fake_llm):
+    fake_llm.models = []
+    cfg = config(acfg, fake_llm, model="test/model")
+    result = await with_live_prices(cfg)
+    assert (result.price_input, result.price_output, result.price_source) == (cfg.price_input, cfg.price_output, "datei")

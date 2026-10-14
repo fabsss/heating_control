@@ -10,6 +10,13 @@ class FakeOpenRouter:
         self.url = ""
         self.responses: list[dict] = []
         self.requests: list[dict] = []
+        self.models: list[dict] = []        # Antwort von /models: [{"id": ..., "pricing": {...}}]
+        self.models_status = 200
+
+    async def models_handler(self, request: web.Request) -> web.Response:
+        if self.models_status != 200:
+            return web.json_response({"error": "kaputt"}, status=self.models_status)
+        return web.json_response({"data": self.models})
 
     async def handler(self, request: web.Request) -> web.Response:
         payload = await request.json()

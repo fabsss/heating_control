@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import aiohttp
 
@@ -36,6 +36,39 @@ class LlmResult:
     tokens_in: int
     tokens_out: int
     cost_usd: float
+
+
+def _models_url(cfg: AnalysisConfig) -> str:
+    return cfg.openrouter_url.replace("/chat/completions", "/models")
+
+
+async def fetch_pricing(cfg: AnalysisConfig) -> tuple[float, float] | None:
+    """Preis des Modells (USD je Million Token) aus der öffentlichen OpenRouter-Modellliste, sonst None."""
+    timeout = aiohttp.ClientTimeout(total=15)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(_models_url(cfg)) as response:
+                if response.status != 200:
+                    return None
+                data = await response.json(content_type=None)
+        for entry in data["data"]:
+            if entry.get("id") == cfg.model:
+                pricing = entry["pricing"]
+                prompt, completion = float(pricing["prompt"]) * 1e6, float(pricing["completion"]) * 1e6
+                return (prompt, completion) if prompt >= 0 and completion >= 0 else None
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError, TypeError):
+        return None
+    return None
+
+
+async def with_live_prices(cfg: AnalysisConfig) -> AnalysisConfig:
+    """Preise aus Umgebungsvariablen gelten zuerst, danach OpenRouter, zuletzt die Datei."""
+    if cfg.price_source == "env":
+        return cfg
+    prices = await fetch_pricing(cfg)
+    if prices is None:
+        return cfg
+    return replace(cfg, price_input=prices[0], price_output=prices[1], price_source="openrouter")
 
 
 def estimate_cost(messages: list[dict], cfg: AnalysisConfig) -> float:

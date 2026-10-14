@@ -102,13 +102,15 @@ Die Regeln liegen in `config/analysis.yaml` (Modell, Kostenlimit, Schwellen des 
 |---|---|---|
 | `OPENROUTER_API_KEY` | ja | OpenRouter-Schlüssel (nur aus der Umgebung, nie aus der Datei) |
 | `OPENROUTER_MODEL` | nein | überschreibt `model` aus `analysis.yaml`, z. B. `anthropic/claude-sonnet-4.5` |
-| `OPENROUTER_PRICE_INPUT`, `OPENROUTER_PRICE_OUTPUT` | nein | USD je Million Token, überschreiben `price_per_mtok` (nur für die Kostenschätzung vor dem Aufruf; abgerechnet wird nach den Kosten, die OpenRouter meldet). Bei einem anderen Modell mitsetzen, sonst stimmt die Schätzung nicht. |
+| `OPENROUTER_PRICE_INPUT`, `OPENROUTER_PRICE_OUTPUT` | nein | USD je Million Token; nur nötig, um die Preise zu erzwingen |
+
+Die Preise holt `analysis run` selbst aus der öffentlichen OpenRouter-Modellliste (`/api/v1/models`, ohne Schlüssel) und gibt sie vor dem Lauf auf stderr aus, z. B. `Preise: 3.00 / 15.00 USD je Million Token (OpenRouter)`. Reihenfolge: Umgebungsvariablen, dann OpenRouter, dann `price_per_mtok` in `analysis.yaml` (Rückfall, wenn OpenRouter nicht erreichbar ist oder das Modell nicht kennt). Die Preise gehen nur in die Kostenschätzung vor dem Aufruf ein; abgerechnet wird nach den Kosten, die OpenRouter im Ergebnis meldet.
 
 Beispiel für einen Lauf mit anderem Modell:
 
 ```bash
 read -s OPENROUTER_API_KEY; export OPENROUTER_API_KEY
-docker run --rm -e OPENROUTER_API_KEY -e OPENROUTER_MODEL='vendor/modell' -e OPENROUTER_PRICE_INPUT=1.0 -e OPENROUTER_PRICE_OUTPUT=5.0 \
+docker run --rm -e OPENROUTER_API_KEY -e OPENROUTER_MODEL='vendor/modell' \
   -v /mnt/data/nobackup/homeassistant/ai:/data home-ai-collector python -m analysis run --mode weekly
 ```
 
