@@ -43,6 +43,10 @@ class Backtester:
             instants = self._trigger_instants(candidate)
         except NotTestable as exc:
             return BacktestResult(STATUS_UNTESTABLE, str(exc), {})
+        try:
+            self._check_condition_data(candidate)
+        except NotTestable as exc:
+            return BacktestResult(STATUS_UNTESTABLE, str(exc), {})
         instants = [instant for instant in instants
                     if self.start <= instant < self.end
                     and not excluded(self.cfg, candidate.room, instant)
@@ -109,6 +113,13 @@ class Backtester:
         raise NotTestable(f"unbekanntes Ereignis {event}")
 
     # --- Bedingungen ------------------------------------------------------------
+
+    def _check_condition_data(self, candidate: Candidate) -> None:
+        for condition in candidate.conditions:
+            if condition.get("type") == "outside_temp" and not self.ctx.outside_temp:
+                raise NotTestable("kein Außensensor aufgezeichnet")
+            if condition.get("type") == "person_home" and not self.ctx.person_timeline(condition["person"]):
+                raise NotTestable("keine Daten für die Person in der Bedingung")
 
     def _conditions_hold(self, candidate: Candidate, instant: datetime) -> bool:
         local = instant.astimezone(self.tz)

@@ -19,7 +19,7 @@ class ZdrUnavailable(LlmError):
 
 
 class InvalidResponse(LlmError):
-    pass
+    partial = None   # LlmResult der bereits bezahlten Aufrufe
 
 
 class CostLimitExceeded(LlmError):
@@ -136,6 +136,7 @@ async def request_candidates(cfg: AnalysisConfig, messages: list[dict], api_key:
             return parse_candidates_json(result.text, cfg.max_candidates), total
         except InvalidResponse as exc:
             if attempt == 1:
+                exc.partial = total
                 raise
             current = [*messages,
                        {"role": "assistant", "content": result.text},

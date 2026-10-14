@@ -158,7 +158,7 @@ def test_outside_temperature_condition(acfg):
     warm = backtester(acfg, [], ctx).evaluate(rule(time_rule(weekdays=range(7)), conditions=above))
     assert cold.metrics["ausloesungen"] == 7.0 and warm.metrics["ausloesungen"] == 35.0
     unknown = backtester(acfg, []).evaluate(rule(time_rule(weekdays=range(7)), conditions=below))
-    assert unknown.metrics["ausloesungen"] == 0.0         # ohne Messwert gilt die Bedingung nicht
+    assert unknown.status == STATUS_UNTESTABLE            # ohne Außensensor nicht prüfbar, statt still 0 Fälle
 
 
 def test_person_home_condition(acfg):
@@ -241,3 +241,17 @@ def test_backtest_is_reproducible(acfg):
     first = backtester(acfg, items).evaluate(rule(time_rule()))
     second = backtester(acfg, items).evaluate(rule(time_rule()))
     assert first == second
+
+
+def test_missing_outside_sensor_makes_condition_candidate_untestable(acfg):
+    candidate = rule({"type": "time", "weekdays": [0, 1, 2, 3, 4], "time": "17:30"},
+                     conditions=[{"type": "outside_temp", "op": "below", "value": 8}])
+    result = backtester(acfg, weekday_interventions()).evaluate(candidate)
+    assert result.status == STATUS_UNTESTABLE and result.note and result.metrics == {}
+
+
+def test_person_home_condition_without_person_data_is_untestable(acfg):
+    candidate = rule({"type": "time", "weekdays": [0, 1, 2, 3, 4], "time": "17:30"},
+                     conditions=[{"type": "person_home", "person": "person.unbekannt", "home": True}])
+    result = backtester(acfg, weekday_interventions()).evaluate(candidate)
+    assert result.status == STATUS_UNTESTABLE and result.note

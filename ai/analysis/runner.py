@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 from collections import Counter
@@ -14,7 +14,7 @@ from .context import ContextProvider
 from .features import build_clusters, build_weekly, data_period, known_presets, room_name
 from .interventions import load_interventions
 from .llm import request_candidates
-from .models import STATUS_OPEN, Intervention
+from .models import STATUS_OPEN, STATUS_UNTESTABLE, Intervention
 from .prompts import build_messages
 from .pseudonym import Pseudonyms, build_pseudonyms
 from .store import Store
@@ -138,8 +138,11 @@ async def run_analysis(db: Database, cfg: AnalysisConfig, mode: str, *, api_key:
                          tokens_out=result.tokens_out, cost_usd=result.cost_usd)
     except Exception as exc:
         store.rollback()
+        partial = getattr(exc, "partial", None)
+        spent = ({"response_text": partial.text, "tokens_in": partial.tokens_in,
+                  "tokens_out": partial.tokens_out, "cost_usd": partial.cost_usd} if partial else {})
         store.finish_run(run_id, "fehlgeschlagen", now(), error=str(exc)[:500], prompt_hash=prompt_hash,
-                         prompt_text=prompt_text)
+                         prompt_text=prompt_text, **spent)
         raise
     return RunSummary(run_id, mode, len(candidates), dict(counts), result.cost_usd,
                       result.tokens_in, result.tokens_out)
@@ -149,6 +152,9 @@ def backtest_candidate(db: Database, cfg: AnalysisConfig, candidate_id: int, *,
                        start: datetime | None = None, end: datetime | None = None) -> BacktestResult:
     store = Store(db)
     candidate = store.get_candidate(candidate_id)
+    if candidate.status == STATUS_UNTESTABLE:
+        # Gespeichert sind dann die ungeprüften Rohwerte des Modells; nachrechnen ist sinnlos.
+        return BacktestResult(STATUS_UNTESTABLE, candidate.note, store.results(candidate_id))
     env = load_environment(db, cfg, start, end)
     outcome = Backtester(cfg, env.interventions, env.ctx, env.start, env.end).evaluate(candidate)
     store.set_candidate_status(candidate_id, outcome.status, outcome.note)

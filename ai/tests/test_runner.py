@@ -1,10 +1,11 @@
-import json
+﻿import json
 from dataclasses import replace
 
 import pytest
 
 from analysis.backtest import Backtester
-from analysis.models import STATUS_PASSED, STATUS_UNTESTABLE
+from analysis.models import STATUS_PASSED, STATUS_UNTESTABLE, Candidate
+from collector.models import utcnow
 from analysis.llm import InvalidResponse
 from analysis.runner import (NothingToAnalyze, TooFewInterventions, backtest_candidate, prepare,
                              run_analysis)
@@ -161,10 +162,36 @@ async def test_backtest_candidate_recomputes_and_updates(db, cfg, fake_llm):
     summary = await run(db, cfg)
     store = Store(db)
     (candidate,) = store.list_candidates(run_id=summary.run_id)
-    store.set_candidate_status(candidate.id, STATUS_UNTESTABLE, "manuell verstellt")
+    store.set_candidate_status(candidate.id, "abgelehnt", "manuell verstellt")
     store.save_results(candidate.id, {})
     store.commit()
     result = backtest_candidate(db, cfg, candidate.id)
     assert result.status == "zu_wenig_belege"
     assert store.get_candidate(candidate.id).status == "zu_wenig_belege"
     assert store.results(candidate.id)["ausloesungen"] == 30.0
+
+
+async def test_backtest_keeps_garbage_candidates_untestable(db, cfg):
+    store = Store(db)
+    run_id = store.start_run("weekly", "m", {}, utcnow())
+    garbage = Candidate(room="Garage", trigger={"type": "time", "weekdays": [1], "time": "25:99"},
+                        action={"type": "setpoint", "value": 99}, status=STATUS_UNTESTABLE,
+                        note="unbekannter Raum")
+    empty = Candidate(room="Garage", trigger={}, action={}, status=STATUS_UNTESTABLE, note="unbekannt")
+    ids = [store.add_candidate(run_id, item) for item in (garbage, empty)]
+    store.commit()
+    for candidate_id in ids:
+        result = backtest_candidate(db, cfg, candidate_id)
+        assert result.status == STATUS_UNTESTABLE
+        assert store.get_candidate(candidate_id).status == STATUS_UNTESTABLE
+    assert store.get_candidate(ids[0]).note == "unbekannter Raum"
+
+
+async def test_failed_run_keeps_cost_tokens_and_last_response(db, cfg, fake_llm):
+    fake_llm.responses = [{"content": "kein json", "cost": 0.4}, {"content": "immer noch nicht", "cost": 0.6}]
+    with pytest.raises(InvalidResponse):
+        await run(db, cfg)
+    (row,) = Store(db).list_runs()
+    assert row["status"] == "fehlgeschlagen"
+    assert row["cost_usd"] == pytest.approx(1.0)
+    assert row["tokens_in"] and row["response_text"] == "immer noch nicht"
