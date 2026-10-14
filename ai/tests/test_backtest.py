@@ -1,4 +1,4 @@
-﻿from dataclasses import replace
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
