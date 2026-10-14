@@ -42,6 +42,27 @@ def test_insert_changes_is_idempotent_and_counts_new_rows(db: Database):
     assert db.count_changes("climate.bt") == 2
 
 
+def test_insert_changes_adds_missing_context_to_existing_row(db: Database):
+    db.upsert_entity(rule(), "buero", T0)
+    plain = Change(T0, "climate.bt", "heat", {"temperature": 21})
+    with_context = Change(T0, "climate.bt", "heat", {"temperature": 21}, "c1", "u1", None)
+    assert db.insert_changes([plain], "gap:history_api") == 1
+    assert db.insert_changes([with_context], "backfill:a.db") == 0     # keine neue Zeile
+    row = db.conn.execute("SELECT context_id, context_user_id, source FROM state_changes").fetchone()
+    assert (row["context_id"], row["context_user_id"]) == ("c1", "u1")
+    assert db.count_changes("climate.bt") == 1
+
+
+def test_insert_changes_does_not_overwrite_existing_context(db: Database):
+    db.upsert_entity(rule(), "buero", T0)
+    first = Change(T0, "climate.bt", "heat", {"temperature": 21}, "c1", "u1", None)
+    second = Change(T0, "climate.bt", "heat", {"temperature": 21}, "c2", "u2", None)
+    db.insert_changes([first], "live")
+    db.insert_changes([second], "backfill:a.db")
+    row = db.conn.execute("SELECT context_id, context_user_id FROM state_changes").fetchone()
+    assert (row["context_id"], row["context_user_id"]) == ("c1", "u1")
+
+
 def test_insert_changes_lowers_tracked_since(db: Database):
     db.upsert_entity(rule(), "buero", T0 + timedelta(days=10))
     db.insert_changes([change(0, temperature=17)], "backfill:a.db")

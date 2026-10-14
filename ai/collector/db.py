@@ -137,6 +137,17 @@ class Database:
                 rows,
             )
             inserted = self.conn.total_changes - before
+            # Eine Zeile ohne Kontext (z. B. aus der History-API) bekommt den Kontext nachgetragen,
+            # wenn dieselbe Änderung mit Kontext eintrifft; vorhandener Kontext bleibt unverändert.
+            self.conn.executemany(
+                """
+                UPDATE state_changes SET context_id = ?, context_user_id = ?, context_parent_id = ?
+                WHERE entity_id = ? AND ts_utc = ? AND state IS ? AND attrs_hash = ?
+                  AND context_id IS NULL AND context_user_id IS NULL AND context_parent_id IS NULL
+                """,
+                [(row[5], row[6], row[7], row[1], row[0], row[2], row[4])
+                 for row in rows if row[5] or row[6] or row[7]],
+            )
             for entity_id, stamp in first_seen.items():
                 self.conn.execute(
                     "UPDATE entities SET tracked_since = ? "
