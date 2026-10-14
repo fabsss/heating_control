@@ -94,6 +94,14 @@ docker exec home-ai-collector python -m analysis compare
 docker exec home-ai-collector python -m analysis list --status bestanden
 ```
 
+Zusammenhang zwischen Anwesenheit und Eingriffen (lokal, ohne LLM, zeigt Klarnamen):
+
+```bash
+docker exec home-ai-collector python -m analysis presence
+```
+
+Der Bericht zeigt drei Dinge: wie oft nach einer Ankunft oder einem Abgang ein Eingriff folgt (verglichen mit derselben Uhrzeit an anderen Tagen), ob bei Eingriffen jemand zu Hause war (verglichen mit der Zeit, die die Person im Mittel zu Hause ist) und wie viel Zeit seit der letzten Ankunft vergangen war (verglichen mit zufälligen Zeitpunkten).
+
 Die Regeln liegen in `config/analysis.yaml` (Modell, Kostenlimit, Schwellen des Backtests, Ausschlüsse, Raumnamen) und sind ins Image eingebaut; nach einer Änderung das Image neu bauen. Der Schlüssel steht nie in einer Datei. Zugangsdaten und Modell kommen aus Umgebungsvariablen:
 
 | Variable | Pflicht | Bedeutung |

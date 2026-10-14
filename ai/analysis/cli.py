@@ -11,6 +11,7 @@ from collector.models import parse_utc
 
 from .candidates import describe, signature
 from .config import AnalysisConfigError, load_analysis_config
+from .presence import analyze as analyze_presence, render as render_presence
 from .llm import LlmError, estimate_cost, with_live_prices
 from .pseudonym import build_pseudonyms
 from .runner import MODES, AnalysisError, backtest_candidate, prepare, run_analysis
@@ -34,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     listing = sub.add_parser("list", help="Kandidaten anzeigen")
     listing.add_argument("--run", dest="run_id", type=int)
     listing.add_argument("--status", choices=STATUSES)
+    sub.add_parser("presence", help="Anwesenheit und manuelle Eingriffe gegenüberstellen")
     backtest = sub.add_parser("backtest", help="Backtest eines Kandidaten erneut rechnen")
     backtest.add_argument("candidate_id", type=int)
     backtest.add_argument("--from", dest="since")
@@ -126,6 +128,11 @@ def _cmd_list(cfg, db: Database, store: Store, args) -> int:
     return 0
 
 
+def _cmd_presence(cfg, db: Database) -> int:
+    print(render_presence(analyze_presence(db, cfg)))
+    return 0
+
+
 def _cmd_backtest(cfg, db: Database, args) -> int:
     start, end = _period(args)
     outcome = backtest_candidate(db, cfg, args.candidate_id, start=start, end=end)
@@ -147,6 +154,8 @@ def main(argv: list[str] | None = None) -> int:
             store = Store(db)
             if args.command == "run":
                 return _cmd_run(cfg, db, args)
+            if args.command == "presence":
+                return _cmd_presence(cfg, db)
             if args.command == "compare":
                 return _cmd_compare(store, args)
             if args.command == "list":

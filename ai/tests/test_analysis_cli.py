@@ -217,3 +217,10 @@ async def test_model_from_environment_is_shown_with_its_source(files, fake_llm, 
     err = capsys.readouterr().err
     assert "Modell: google/gemma-test (Umgebungsvariable OPENROUTER_MODEL)" in err
     assert "Preise: 0.10 / 0.20 USD je Million Token (OpenRouter)" in err
+
+
+async def test_presence_command_prints_the_correlation_report(files, capsys):
+    assert await cli(files, "presence") == 0
+    out = capsys.readouterr().out
+    assert "Ankünfte und Abgänge" in out and "Anwesenheit bei Eingriffen" in out
+    assert "Svenja" in out
