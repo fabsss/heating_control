@@ -18,6 +18,9 @@ services:
     volumes:
       - /mnt/data/nobackup/homeassistant/ai:/data
       - /mnt/data/backup/databases:/backup
+      # alte Home-Assistant-Datenbanken für den Backfill (schreibbar eingebunden: SQLite öffnet bei WAL-Dateien die -shm-Datei;
+      # die Datenbank selbst wird nur lesend geöffnet)
+      - /mnt/data/nobackup/homeassistant/snapshots:/snapshots
     healthcheck:
       test: ["CMD", "python", "-m", "collector.healthcheck"]
       interval: 60s

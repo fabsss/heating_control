@@ -35,21 +35,21 @@ Nach dem Start erscheint `Registry-Abgleich: N Entitäten mit Label KI_DB_Sync`.
 ## Alte Daten einspielen (nur lesend)
 
 1. Im Proxmox Backup Server den Snapshot der Home-Assistant-VM wählen, „File Restore“ öffnen und auf der Datenpartition `home-assistant_v2.db` samt `-wal` und `-shm` herunterladen (HAOS: `/mnt/data/supervisor/homeassistant/`).
-2. Die Dateien in einen eigenen Ordner unter `snapshots/` legen (liegt nicht im Repository).
-3. Einspielen (Ordner schreibbar einbinden, SQLite öffnet die Datei trotzdem nur lesend):
+2. Die Dateien in einen eigenen Ordner unter `/mnt/data/nobackup/homeassistant/snapshots/` legen (z. B. `june/`). Dieser Ordner ist im Container unter `/snapshots` eingebunden (Stack neu deployen, wenn die Compose-Datei ihn noch nicht hatte).
+3. Einspielen im laufenden Container (`HA_TOKEN` und `HA_URL` stehen dort schon):
 
 ```bash
-docker compose run --rm -v "$PWD/snapshots:/snapshots" collector \
-  python -m collector backfill --db /snapshots/april/home-assistant_v2.db --history-map /app/config/history_map.yaml
+docker exec home-ai-collector python -m collector backfill --db /snapshots/june/home-assistant_v2.db
 ```
+
+Mit `--history-map /app/config/history_map.yaml` lassen sich umbenannte Entitäten zuordnen (nur nötig, wenn es welche gibt).
 
 Mehrfaches Einspielen derselben oder überlappender Dateien ist unschädlich.
 
 ## Prüfen
 
 ```bash
-docker compose run --rm -v "$PWD/snapshots:/snapshots" collector \
-  python -m collector verify --db /snapshots/april/home-assistant_v2.db
+docker exec home-ai-collector python -m collector verify --db /snapshots/june/home-assistant_v2.db
 ```
 
 Vergleicht die abgeleiteten manuellen Eingriffe (`manual_actions`) mit den Ereignissen `thermostat_actor_logged` aus derselben Datenbank. Erwartet: Trefferquote mindestens 95 %.
