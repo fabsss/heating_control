@@ -142,7 +142,7 @@ associations(run_id, signal, event, prev_class, room, win_start, win_end,
 
 **Tests.**
 - Ereignisse je Signalart (Dauerklassen, Terzile, Weckzeit mit gelöschtem und mit verschobenem Wecker) auf kleinen synthetischen Verläufen.
-- Scan: Die versteckte Gewohnheit liegt als stärkste Assoziation vorn; Zufallsdaten ergeben bei `q_max` höchstens eine falsche Meldung in zwanzig Läufen mit festem Zufallskern; eine Wecker-Fixture findet die Weckzeit.
+- Scan: Die versteckte Gewohnheit liegt als stärkste Assoziation vorn; Zufallsdaten (fester Zufallskern) ergeben keine Assoziation; eine Wecker-Fixture findet die Weckzeit.
 - Signalkennungen bleiben stabil, wenn Entitäten hinzukommen.
 - Pseudonymisierung: weder Namen noch Entity-IDs noch Zonen-Namen im gesendeten Text (Signalkatalog, Assoziationen, Werte).
 - Vokabular: jede neue Form gültig, jeder Unsinnswert `nicht_pruefbar`; alte Formen unverändert.
