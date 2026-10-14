@@ -35,7 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
     listing = sub.add_parser("list", help="Kandidaten anzeigen")
     listing.add_argument("--run", dest="run_id", type=int)
     listing.add_argument("--status", choices=STATUSES)
-    sub.add_parser("presence", help="Anwesenheit und manuelle Eingriffe gegenüberstellen")
+    presence = sub.add_parser("presence", help="Anwesenheit und manuelle Eingriffe gegenüberstellen")
+    presence.add_argument("--min-away", type=int, default=120,
+                          help="Minuten, die der vorherige Zustand mindestens galt (Standard 120)")
     backtest = sub.add_parser("backtest", help="Backtest eines Kandidaten erneut rechnen")
     backtest.add_argument("candidate_id", type=int)
     backtest.add_argument("--from", dest="since")
@@ -128,8 +130,8 @@ def _cmd_list(cfg, db: Database, store: Store, args) -> int:
     return 0
 
 
-def _cmd_presence(cfg, db: Database) -> int:
-    print(render_presence(analyze_presence(db, cfg)))
+def _cmd_presence(cfg, db: Database, args) -> int:
+    print(render_presence(analyze_presence(db, cfg, min_state_min=args.min_away)))
     return 0
 
 
@@ -155,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "run":
                 return _cmd_run(cfg, db, args)
             if args.command == "presence":
-                return _cmd_presence(cfg, db)
+                return _cmd_presence(cfg, db, args)
             if args.command == "compare":
                 return _cmd_compare(store, args)
             if args.command == "list":

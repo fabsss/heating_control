@@ -222,5 +222,5 @@ async def test_model_from_environment_is_shown_with_its_source(files, fake_llm, 
 async def test_presence_command_prints_the_correlation_report(files, capsys):
     assert await cli(files, "presence") == 0
     out = capsys.readouterr().out
-    assert "Ankünfte und Abgänge" in out and "Anwesenheit bei Eingriffen" in out
+    assert "Ankünfte und Abgänge" in out and "Zeit seit der letzten Ankunft" in out
     assert "Svenja" in out

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from collector.db import Database
@@ -12,45 +12,39 @@ from .config import AnalysisConfig
 from .context import UNKNOWN
 from .interventions import load_interventions
 from .pseudonym import build_pseudonyms
-from .timeline import Timeline, load_timeline
+from .timeline import load_timeline
 
+BIN_MINUTES = 30
+BIN_STARTS = tuple(range(-120, 120, BIN_MINUTES))        # zwei Stunden davor bis zwei Stunden danach
+SPAN_MINUTES = 120
 BUCKETS = (("≤15 min", 15), ("≤30 min", 30), ("≤60 min", 60), ("≤120 min", 120), ("≤240 min", 240))
 LATER = "später/nie"
 CONTROL_DAYS = 7
 
 
 @dataclass
-class ArrivalRow:
+class EventRow:
     person: str
     event: str                       # kommt | geht
-    count: int
-    hits: dict[int, int]
+    raw_count: int                   # alle Wechsel an Tagen mit Eingriffen
+    count: int                       # davon nach dem Filter (Zustand vorher mindestens min_state_min lang)
+    hits: dict[int, int]             # Abschnittsbeginn (Minuten) -> Ereignisse mit Eingriff im Abschnitt
     control_count: int
     control_hits: dict[int, int]
 
 
 @dataclass
-class PresenceRow:
-    person: str
-    interventions: int
-    at_interventions: int
-    baseline_total: int
-    baseline_home: int
-
-
-@dataclass
 class PresenceReport:
-    windows: tuple[int, ...]
+    min_state_min: int = 120
     interventions: int = 0
     days: int = 0
-    arrivals: list[ArrivalRow] = field(default_factory=list)
-    presence: list[PresenceRow] = field(default_factory=list)
+    rows: list[EventRow] = field(default_factory=list)
     delays: dict[str, tuple[int, int]] = field(default_factory=dict)
     grid_total: int = 0
 
 
-def _any_between(times: list[datetime], low: datetime, high: datetime) -> bool:
-    return bisect_left(times, low) < bisect_right(times, high)
+def _count(times: list[datetime], low: datetime, high: datetime) -> int:
+    return bisect_left(times, high) - bisect_left(times, low)
 
 
 def _bucket(minutes: float | None) -> str:
@@ -61,8 +55,28 @@ def _bucket(minutes: float | None) -> str:
     return LATER
 
 
-def analyze(db: Database, cfg: AnalysisConfig, windows: tuple[int, ...] = (15, 30, 60, 120)) -> PresenceReport:
-    report = PresenceReport(windows=windows)
+def _events(transitions: list, kind: str, min_state_min: int, first: datetime | None) -> list[tuple[datetime, bool]]:
+    """(Zeitpunkt, bestanden) für Ankünfte (`kommt`) oder Abgänge (`geht`).
+
+    Ein Ereignis besteht den Filter, wenn der Zustand davor mindestens `min_state_min` Minuten lang galt.
+    Das schließt das Springen zwischen home und not_home aus. Der erste bekannte Zustand gilt ab dem ersten Messpunkt.
+    """
+    found = []
+    for index, (ts, old, new) in enumerate(transitions):
+        if kind == "kommt":
+            wanted = new == "home" and old not in UNKNOWN
+        else:
+            wanted = old == "home" and new not in UNKNOWN
+        if not wanted:
+            continue
+        previous = transitions[index - 1][0] if index > 0 else first
+        long_enough = previous is not None and (ts - previous).total_seconds() / 60 >= min_state_min
+        found.append((ts, long_enough))
+    return found
+
+
+def analyze(db: Database, cfg: AnalysisConfig, min_state_min: int = 120) -> PresenceReport:
+    report = PresenceReport(min_state_min=min_state_min)
     interventions = load_interventions(db, cfg)
     if not interventions:
         return report
@@ -78,56 +92,46 @@ def analyze(db: Database, cfg: AnalysisConfig, windows: tuple[int, ...] = (15, 3
         return datetime.combine(local.date() + timedelta(days=days), local.time(), tz).astimezone(timezone.utc)
 
     pseudo = build_pseudonyms(db)
-    timelines: dict[str, Timeline] = {}
-    arrivals_by_person: dict[str, list[datetime]] = {}
-    leaves_by_person: dict[str, list[datetime]] = {}
+    all_arrivals: list[datetime] = []
     for entity_id in pseudo.persons:
         timeline = load_timeline(db, entity_id)
         if not timeline:
             continue
-        timelines[entity_id] = timeline
-        arrivals_by_person[entity_id] = [ts for ts, old, new in timeline.transitions()
-                                         if new == "home" and old not in UNKNOWN]
-        leaves_by_person[entity_id] = [ts for ts, old, new in timeline.transitions()
-                                       if old == "home" and new not in UNKNOWN]
-
-    longest = max(windows)
-    for entity_id, timeline in timelines.items():
+        transitions = timeline.transitions()
         name = pseudo.display_name(entity_id)
-        for label, events in (("kommt", arrivals_by_person[entity_id]), ("geht", leaves_by_person[entity_id])):
-            events = sorted(events)
-            used = [ts for ts in events if ts.astimezone(tz).date() in active_days]
-            if not used:
+        for kind in ("kommt", "geht"):
+            events = _events(transitions, kind, min_state_min, timeline.first_ts())
+            in_scope = [(ts, ok) for ts, ok in events if ts.astimezone(tz).date() in active_days]
+            used = sorted(ts for ts, ok in in_scope if ok)
+            if kind == "kommt":
+                all_arrivals.extend(ts for ts, ok in events if ok)
+            if not in_scope:
                 continue
-            hits = {w: sum(_any_between(times, ts, ts + timedelta(minutes=w)) for ts in used) for w in windows}
+            hits = {start: 0 for start in BIN_STARTS}
+            control_hits = {start: 0 for start in BIN_STARTS}
             control_count = 0
-            control_hits = {w: 0 for w in windows}
             for ts in used:
+                for start in BIN_STARTS:
+                    low = ts + timedelta(minutes=start)
+                    hits[start] += _count(times, low, low + timedelta(minutes=BIN_MINUTES)) > 0
                 for delta in range(-CONTROL_DAYS, CONTROL_DAYS + 1):
                     if delta == 0:
                         continue
                     other = shifted(ts, delta)
                     if other.astimezone(tz).date() not in active_days:
                         continue
-                    if _any_between(events, other - timedelta(minutes=15), other + timedelta(minutes=longest)):
+                    if _count(used, other - timedelta(minutes=SPAN_MINUTES), other + timedelta(minutes=SPAN_MINUTES)):
                         continue
                     control_count += 1
-                    for w in windows:
-                        control_hits[w] += _any_between(times, other, other + timedelta(minutes=w))
-            report.arrivals.append(ArrivalRow(name, label, len(used), hits, control_count, control_hits))
+                    for start in BIN_STARTS:
+                        low = other + timedelta(minutes=start)
+                        control_hits[start] += _count(times, low, low + timedelta(minutes=BIN_MINUTES)) > 0
+            report.rows.append(EventRow(name, kind, len(in_scope), len(used), hits, control_count, control_hits))
 
+    all_arrivals.sort()
     grid = [datetime.combine(day, time(hour, minute), tz).astimezone(timezone.utc)
             for day in sorted(intervention_days) for hour in range(6, 24) for minute in (0, 30)]
     report.grid_total = len(grid)
-    for entity_id, timeline in timelines.items():
-        known = [ts for ts in times if timeline.value_at(ts) not in UNKNOWN]
-        base = [ts for ts in grid if timeline.value_at(ts) not in UNKNOWN]
-        report.presence.append(PresenceRow(
-            pseudo.display_name(entity_id), len(known),
-            sum(timeline.value_at(ts) == "home" for ts in known), len(base),
-            sum(timeline.value_at(ts) == "home" for ts in base)))
-
-    all_arrivals = sorted(ts for events in arrivals_by_person.values() for ts in events)
 
     def since_last_arrival(ts: datetime) -> float | None:
         index = bisect_right(all_arrivals, ts) - 1
@@ -143,30 +147,30 @@ def analyze(db: Database, cfg: AnalysisConfig, windows: tuple[int, ...] = (15, 3
 
 
 def _pct(part: int, total: int) -> str:
-    return "  -  " if not total else f"{100 * part / total:.0f}%"
+    return "-" if not total else f"{100 * part / total:.0f}%"
 
 
 def render(report: PresenceReport) -> str:
     if not report.interventions:
         return "Keine manuellen Eingriffe gefunden."
     lines = [f"{report.interventions} manuelle Eingriffe an {report.days} Tagen. Ausgewertet werden nur Tage mit "
-             f"Eingriffen (±1 Tag), Zeiten in lokaler Zeit.", ""]
-    lines.append("Ankünfte und Abgänge: Anteil, auf den ein Eingriff in irgendeinem Raum folgt.")
-    lines.append("In Klammern die Kontrolle: dieselbe Uhrzeit an anderen Tagen ohne dieses Ereignis.")
-    header = f"{'Person':<12}{'Ereignis':<8}{'Anzahl':>7}  " + "  ".join(f"{'in ' + str(w) + ' min':>16}" for w in report.windows)
-    lines.append(header)
-    for row in report.arrivals:
-        cells = "  ".join(f"{_pct(row.hits[w], row.count):>7} ({_pct(row.control_hits[w], row.control_count):>5})"
-                          .rjust(16) for w in report.windows)
-        lines.append(f"{row.person:<12}{row.event:<8}{row.count:>7}  {cells}")
-    lines += ["", "Anwesenheit bei Eingriffen: Anteil, bei dem die Person zu Hause war,",
-              "verglichen mit dem Anteil der Zeit (06 bis 24 Uhr, an Tagen mit Eingriffen), in der sie zu Hause ist."]
-    for row in report.presence:
-        lines.append(f"{row.person:<12}bei Eingriffen {_pct(row.at_interventions, row.interventions):>5} "
-                     f"({row.at_interventions}/{row.interventions})   im Mittel {_pct(row.baseline_home, row.baseline_total):>5}")
+             f"Eingriffen (±1 Tag), Zeiten in lokaler Zeit.", "",
+             "Ankünfte und Abgänge. Je Zeile ein 30-Minuten-Abschnitt relativ zum Ereignis (negativ = davor).",
+             "Zahl: Anteil der Ereignisse mit einem Eingriff (irgendein Raum) in diesem Abschnitt.",
+             "In Klammern die Kontrolle: dieselbe Uhrzeit an anderen Tagen ohne dieses Ereignis.",
+             f"Gezählt werden nur Ereignisse, vor denen der Zustand mindestens {report.min_state_min} min galt "
+             "(filtert das Springen zwischen zu Hause und unterwegs):"]
+    for item in report.rows:
+        lines.append(f"  {item.person} {item.event}: {item.count} von {item.raw_count} Wechseln")
+    names = [f"{item.person} {item.event}" for item in report.rows]
+    lines.append(f"{'Minuten':<15}" + "".join(f"{name:>18}" for name in names))
+    for start in BIN_STARTS:
+        cells = "".join(
+            f"{_pct(item.hits[start], item.count) + ' (' + _pct(item.control_hits[start], item.control_count) + ')':>18}"
+            for item in report.rows)
+        lines.append(f"{f'{start} bis {start + BIN_MINUTES}':<15}{cells}")
     lines += ["", "Zeit seit der letzten Ankunft (irgendeiner Person): Eingriffe verglichen mit zufälligen Zeitpunkten.",
               f"{'':<12}{'Eingriffe':>16}{'Zufall':>16}"]
-    total_grid = report.grid_total
     for label, (count, grid_count) in report.delays.items():
-        lines.append(f"{label:<12}{_pct(count, report.interventions):>9} ({count:>3}){_pct(grid_count, total_grid):>9} ({grid_count:>4})")
+        lines.append(f"{label:<12}{_pct(count, report.interventions):>9} ({count:>3}){_pct(grid_count, report.grid_total):>9} ({grid_count:>4})")
     return "\n".join(lines)

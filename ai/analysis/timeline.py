@@ -17,6 +17,9 @@ class Timeline:
     def __bool__(self) -> bool:
         return bool(self._points)
 
+    def first_ts(self) -> datetime | None:
+        return self._times[0] if self._times else None
+
     def value_at(self, ts: datetime) -> str | None:
         index = bisect_right(self._times, ts) - 1
         return None if index < 0 else self._points[index][1]
