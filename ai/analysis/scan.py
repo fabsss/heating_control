@@ -132,6 +132,7 @@ def run_scan(cfg: AnalysisConfig, library: SignalLibrary, interventions: list[In
                 if bisect_left(events, other + timedelta(minutes=SPAN_MINUTES)) > low:
                     continue
                 controls.append(other)
+        controls = sorted(set(controls))          # jeder Kontrollzeitpunkt zählt einmal, auch wenn mehrere Ereignisse ihn erzeugen
         if not controls:
             continue
         kept[index] = (events, controls)

@@ -24,7 +24,7 @@ def build_scan_db(db: Database, interventions: Callable[[int, date], list[dateti
     """Sechs Wochen: Svenja ist werktags von 07:00 bis zur Ankunft weg und bis 22:30 zu Hause.
 
     `interventions(n, day)` liefert die UTC-Zeitpunkte der Eingriffe von Svenja an Tag n.
-    Mit `alarm_time` gibt es einen Wecker, der jeden Abend um 20:00 auf die Weckzeit des Folgetags gestellt wird.
+    Mit `alarm_time` gibt es einen Wecker, der an Werktagen am Vorabend um 20:00 auf die Weckzeit gestellt wird (am Wochenende klingelt nichts, das ist die Kontrolle).
     """
     now = datetime(2026, 3, 1, tzinfo=timezone.utc)
     db.upsert_entity(EntityRule("climate.bt", "climate", "heating", attrs=("temperature", "preset_mode")), ROOM, now)
@@ -41,7 +41,7 @@ def build_scan_db(db: Database, interventions: Callable[[int, date], list[dateti
         if day.weekday() < 5:
             changes.append(Change(local_utc(day, arrival), "person.svenja", "home"))
             changes.append(Change(local_utc(day, "22:30"), "person.svenja", "not_home"))
-        if alarm_time:
+        if alarm_time and day.weekday() < 5:
             changes.append(Change(local_utc(day - timedelta(days=1), "20:00"), "sensor.next_alarm",
                                   local_utc(day, alarm_time).isoformat()))
         for k, ts in enumerate(interventions(n, day)):

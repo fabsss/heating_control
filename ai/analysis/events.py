@@ -10,6 +10,7 @@ from .config import ScanParams
 from .signals import Signal, SignalLibrary
 
 THROTTLE = timedelta(minutes=60)       # Schwellenüberschreitungen höchstens einmal je Stunde
+STATE_THROTTLE = timedelta(minutes=15)  # Zustandswechsel in denselben Zustand höchstens einmal je Viertelstunde (flatternde Melder)
 ALL = "alle"
 
 
@@ -48,7 +49,7 @@ def _to_state(signal: Signal, value: str) -> list[tuple[datetime, float | None]]
             continue
         if state == previous_state:
             continue
-        if state == value and previous_state is not None:
+        if state == value and previous_state is not None and (not found or ts - found[-1][0] >= STATE_THROTTLE):
             found.append((ts, (ts - started).total_seconds() / 60))
         previous_state, started = state, ts
     return found

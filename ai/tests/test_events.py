@@ -117,3 +117,9 @@ def test_event_text():
     assert event_text(EventSpec("s", "rises_above", "18", ALL)) == "steigt über 18"
     assert event_text(EventSpec("s", "falls_below", "5", ALL)) == "fällt unter 5"
     assert event_text(EventSpec("s", "alarm_time", None, ALL)) == "Weckzeit erreicht"
+
+
+def test_flapping_state_changes_are_thinned_like_crossings():
+    points = [(0, "off"), (10, "on"), (12, "off"), (14, "on"), (16, "off"), (400, "on")]
+    signal = make("categorical", points, values=("off", "on"))
+    assert [ts for ts, _ in signal_events(signal, "to_state", "on")] == [at(10), at(400)]

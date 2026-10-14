@@ -111,7 +111,8 @@ def test_random_interventions_produce_no_significant_associations(db, cfg):
 
 
 def test_alarm_signal_is_found_without_special_handling(db, cfg):
-    build_scan_db(db, lambda n, day: [local_utc(day, "06:30") + timedelta(minutes=10)], alarm_time="06:30")
+    build_scan_db(db, lambda n, day: [] if day.weekday() >= 5 else [local_utc(day, "06:30") + timedelta(minutes=10)],
+                  alarm_time="06:30")
     found, library = scan(db, cfg)
     alarm = [item for item in found if item.event == "alarm_time"]
     assert alarm and library.get(alarm[0].signal).entity_id == "sensor.next_alarm"
@@ -123,3 +124,12 @@ def test_scan_without_interventions_returns_nothing(db, cfg):
     build_scan_db(db, lambda n, day: [])
     found, _ = scan(db, cfg)
     assert found == []
+
+
+def test_control_times_are_unique_even_when_many_events_share_a_clock_time(db, cfg):
+    build_scan_db(db, after_arrival(lambda n: [12]))
+    found, library = scan(db, cfg)
+    top = found[0]
+    assert library.get(top.signal).entity_id == "person.svenja"
+    weekend_days = 2 * 6 + 2                      # sechs Wochen mit Samstag und Sonntag, dazu der Rand
+    assert 0 < top.control_events <= weekend_days
