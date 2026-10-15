@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
-from .models import Change, EntityRule, attrs_hash, attrs_json, parse_utc, to_utc_iso
+from .models import AutomationRun, Change, EntityRule, ServiceCall, attrs_hash, attrs_json, parse_utc, to_utc_iso
 
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "sql" / "schema.sql"
 
@@ -205,6 +205,34 @@ class Database:
         return self.conn.execute(
             "SELECT COUNT(*) FROM state_changes WHERE entity_id = ?", (entity_id,)
         ).fetchone()[0]
+
+    # --- Aufrufe, Automationen, Erfassung ------------------------------------------
+
+    def insert_service_call(self, call: ServiceCall) -> bool:
+        cursor = self.conn.execute(
+            "INSERT OR IGNORE INTO service_calls(ts_utc, domain, service, entity_ids, data, context_id, user_id, parent_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (to_utc_iso(call.ts), call.domain, call.service, json.dumps(list(call.entity_ids)),
+             attrs_json(call.data), call.context_id, call.user_id, call.parent_id),
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def insert_automation_run(self, run: AutomationRun) -> bool:
+        cursor = self.conn.execute(
+            "INSERT OR IGNORE INTO automation_runs(ts_utc, automation_entity, name, context_id) VALUES (?, ?, ?, ?)",
+            (to_utc_iso(run.ts), run.automation_entity, run.name, run.context_id),
+        )
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def mark_capture_start(self, key: str, now: datetime) -> None:
+        self.conn.execute("INSERT OR IGNORE INTO capture_state(key, value) VALUES (?, ?)", (key, to_utc_iso(now)))
+        self.conn.commit()
+
+    def capture_start(self, key: str) -> datetime | None:
+        row = self.conn.execute("SELECT value FROM capture_state WHERE key = ?", (key,)).fetchone()
+        return parse_utc(row["value"]) if row else None
 
     # --- Verwaltung ------------------------------------------------------------
 

@@ -53,6 +53,44 @@ CREATE TABLE IF NOT EXISTS ingest_runs(
   started_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS service_calls(
+  id          INTEGER PRIMARY KEY,
+  ts_utc      TEXT NOT NULL,
+  domain      TEXT NOT NULL,
+  service     TEXT NOT NULL,
+  entity_ids  TEXT NOT NULL DEFAULT '[]',          -- JSON-Liste, leer = Ziel über Bereich/Gerät
+  data        TEXT NOT NULL DEFAULT '{}',
+  context_id  TEXT,
+  user_id     TEXT,
+  parent_id   TEXT,
+  UNIQUE(ts_utc, domain, service, entity_ids, context_id)
+);
+CREATE INDEX IF NOT EXISTS idx_calls_ts ON service_calls(ts_utc);
+CREATE INDEX IF NOT EXISTS idx_calls_ctx ON service_calls(context_id);
+
+CREATE TABLE IF NOT EXISTS automation_runs(
+  id                INTEGER PRIMARY KEY,
+  ts_utc            TEXT NOT NULL,
+  automation_entity TEXT NOT NULL,
+  name              TEXT,
+  context_id        TEXT,
+  UNIQUE(ts_utc, automation_entity, context_id)
+);
+CREATE INDEX IF NOT EXISTS idx_runs_ctx ON automation_runs(context_id);
+
+CREATE TABLE IF NOT EXISTS change_origin(
+  state_change_id INTEGER PRIMARY KEY,
+  origin          TEXT NOT NULL,                   -- benutzer|automation|geraet_unklar|unbekannt
+  via             TEXT NOT NULL,                   -- kontext|zeit|keine
+  actor           TEXT,                            -- Benutzerkennung bei "benutzer"
+  automation      TEXT                             -- Entity-ID der Automation bei "automation"
+);
+
+CREATE TABLE IF NOT EXISTS capture_state(
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 DROP VIEW IF EXISTS manual_actions;
 CREATE VIEW manual_actions AS
 WITH base AS (
