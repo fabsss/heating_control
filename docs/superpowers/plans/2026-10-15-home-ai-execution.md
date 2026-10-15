@@ -6342,6 +6342,12 @@ Diese Aufgabe hat keinen automatischen Test. Sie prüft, was nur die echte HA ze
 - [ ] **Step 9: Aufträge mit dem Modell**
   - „Kosten freigeben“ einschalten und „Analyse mit Modell starten“ drücken: Der Lauf startet, die Freigabe schaltet sich danach aus, das Ergebnis erscheint. Ein zweiter Druck ohne neue Freigabe wird abgelehnt; der vierte Lauf des Tages wird mit dem Tageslimit abgelehnt.
 
+- [ ] **Step 9b: Ergänzungen aus dem Review**
+  - Regel entfernen und denselben Kandidaten erneut anlegen, nachdem der Schalter „aktiv“ an war: Die neue Regel hat eine neue Kennung (`r<id>_2`) und startet im Schatten.
+  - `docker logs home-ai-collector` nach dem Start mit dem echten `HA_TOKEN`: Keine Warnung „nicht abonnierbar“; sonst fehlt dem Token die Administratorrolle.
+  - Die Meldung `homeai/rule/<id>/fired` im MQTT-Explorer ist gültiges JSON mit `ts`, `mode`, `result`, `reason`, `target`, `current`.
+  - Eine Regel genau 59 und 61 Minuten nach einem Handeingriff auslösen (der Blueprint rundet auf eine Dezimale; Abweichung bis zu wenigen Sekunden ist bekannt).
+
 - [ ] **Step 10: Aufräumen**
   - „Regel entfernen“ (oder `execution undeploy r<id>`): Automation und Entitäten sind weg, das Dashboard zeigt die Regel nicht mehr, `execution rules` listet sie nicht, die Historie bleibt in der Datenbank.
   - Befunde in der Spezifikation (Abschnitt 15) festhalten und committen:

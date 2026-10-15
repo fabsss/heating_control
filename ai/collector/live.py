@@ -14,7 +14,7 @@ import aiohttp
 
 from .config import Config
 from .db import Database
-from .hass_ws import HassAuthError, HassClient, HassConnectionError
+from .hass_ws import HassAuthError, HassClient, HassCommandError, HassConnectionError
 from .models import AutomationRun, Change, ServiceCall, parse_utc, utcnow
 from .origins import update_origins
 from .pipeline import Pipeline
@@ -180,14 +180,15 @@ class Collector:
         self._touch_health()
         await self.sync_registry(client)
         stream = await client.subscribe("state_changed")   # vor dem Lückenabgleich, damit nichts fehlt
-        call_stream = await client.subscribe("call_service")
-        run_stream = await client.subscribe("automation_triggered")
-        self.db.mark_capture_start("calls_since", self._now())
+        call_stream = await self._subscribe_optional(client, "call_service")
+        run_stream = await self._subscribe_optional(client, "automation_triggered")
+        if call_stream is not None:
+            self.db.mark_capture_start("calls_since", self._now())
         await self.gap_fill(client)
         tasks = [
             asyncio.create_task(self._consume(stream)),
-            asyncio.create_task(self._consume_calls(call_stream)),
-            asyncio.create_task(self._consume_runs(run_stream)),
+            *([asyncio.create_task(self._consume_calls(call_stream))] if call_stream is not None else []),
+            *([asyncio.create_task(self._consume_runs(run_stream))] if run_stream is not None else []),
             asyncio.create_task(self._periodic(self.cfg.flush_interval_s, self._flush)),
             asyncio.create_task(self._periodic(1.0, self._tick)),
             asyncio.create_task(self._periodic(self.cfg.registry_sync_interval_s, self.sync_registry, client)),
@@ -235,6 +236,15 @@ class Collector:
             change = change_from_event(event)
             if change is not None:
                 self.pipeline.handle(change)
+
+    async def _subscribe_optional(self, client: HassClient, event_type: str):
+        """Abo für die Herkunft der Änderungen; darf der Token es nicht (kein Administrator), läuft die Aufzeichnung weiter."""
+        try:
+            return await client.subscribe(event_type)
+        except HassCommandError as exc:
+            log.warning("Ereignis %s nicht abonnierbar (der Token braucht dafür Administratorrechte): %s. "
+                        "Die Herkunft der Änderungen wird nicht aufgezeichnet.", event_type, exc)
+            return None
 
     def _tracked_climates(self) -> set[str]:
         return {entity_id for entity_id, rule in self.pipeline.rules.items() if rule.kind == "climate"}

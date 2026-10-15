@@ -132,6 +132,37 @@ async def test_deploy_twice_is_refused(world):
         await world.deployer.deploy(world.candidate_id)
 
 
+async def test_redeploy_after_undeploy_gets_a_fresh_rule_id_so_no_old_switch_state_returns(world):
+    first = await world.deployer.deploy(world.candidate_id)
+    await world.deployer.undeploy(first.rule_id)
+    second = await world.deployer.deploy(world.candidate_id)
+    assert (first.rule_id, second.rule_id) == ("r1", "r1_2")
+    assert world.store.get_deployment("r1").state == "entfernt"
+    assert world.store.get_deployment("r1_2").state == "schatten"
+    assert "homeai_rule_r1_2" in world.fake_rest.automations
+    assert set(world.bus.retained) == set(rule_discovery_topics("r1_2"))
+    third_attempt = world.deployer.deploy(world.candidate_id)
+    with pytest.raises(DeployError, match="bereits"):
+        await third_attempt
+
+
+async def test_model_text_and_pseudonyms_never_reach_home_assistant(world, monkeypatch):
+    world.db.conn.execute("UPDATE candidates SET hypothesis = ? WHERE id = ?",
+                          ("person_2 kommt heim, sig_03 steigt", world.candidate_id))
+    world.db.conn.commit()
+    await world.deployer.deploy(world.candidate_id)
+    saved = json.dumps(world.fake_rest.automations["homeai_rule_r1"], ensure_ascii=False)
+    assert "person_2" not in saved and "sig_0" not in saved
+
+
+async def test_deploy_refuses_when_the_description_falls_back_to_pseudonyms(world, monkeypatch):
+    monkeypatch.setattr("execution.deploy.describe",
+                        lambda *args, **kwargs: ("Bad", '{"signal": "sig_01"}', '{"type": "preset"}'))
+    with pytest.raises(DeployError, match="Pseudonym"):
+        await world.deployer.deploy(world.candidate_id)
+    assert world.store.list_deployments() == [] and world.bus.retained == {}
+
+
 async def test_failed_save_leaves_nothing_behind(world):
     world.fake_rest.fail_save = True
     with pytest.raises(HaError):

@@ -84,3 +84,20 @@ async def test_run_session_stores_calls_and_runs_and_derives_origin(cfg, db, fak
     assert db.capture_start("calls_since") is not None
     origin = db.conn.execute("SELECT origin, via, actor FROM change_origin").fetchall()
     assert [tuple(r) for r in origin] == [("benutzer", "kontext", "u-fabian")]
+
+
+async def test_run_session_keeps_recording_when_the_token_may_not_subscribe_to_calls(cfg, db, fake_hass):
+    prepare(fake_hass, [entity_entry("climate.better_thermostat_office")])
+    base = datetime.now(timezone.utc) - timedelta(minutes=5)
+    fake_hass.events = [state_event("climate.better_thermostat_office", "heat", base.isoformat(),
+                                    {"temperature": 21, "preset_mode": "comfort"})]
+    fake_hass.reject_events = {"call_service", "automation_triggered"}
+    fake_hass.close_after_command = HISTORY
+    client = HassClient(fake_hass.url, "secret")
+    collector = make_collector(cfg, db, fake_hass)
+    with pytest.raises(HassConnectionError):
+        await collector.run_session(client)
+    await client.close()
+    assert db.conn.execute("SELECT COUNT(*) FROM state_changes WHERE entity_id = 'climate.better_thermostat_office'"
+                           ).fetchone()[0] >= 1
+    assert db.capture_start("calls_since") is None          # ohne Aufrufe keine Herkunft "Gerät"

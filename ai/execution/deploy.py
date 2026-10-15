@@ -27,6 +27,7 @@ log = logging.getLogger("execution")
 
 BLUEPRINT_VERSION = "1.0"
 TIME_RE = re.compile(r"^\d\d:\d\d")
+PSEUDONYM_RE = re.compile(r"\b(?:sig|person)_\d+\b")
 
 
 class DeployError(RuntimeError):
@@ -128,10 +129,14 @@ class Deployer:
             raise DeployError(f"Kandidat {candidate_id} existiert nicht") from exc
         if candidate.status != STATUS_PASSED:
             raise DeployError(f"Kandidat {candidate_id} hat den Status {candidate.status}, nötig ist bestanden")
-        rule_id = f"r{candidate_id}"
-        existing = self.store.get_deployment(rule_id)
-        if existing is not None and existing.state != "entfernt":
-            raise DeployError(f"Die Regel {rule_id} ist bereits angelegt")
+        history = [item for item in self.store.list_deployments(include_removed=True)
+                   if item.candidate_id == candidate_id]
+        live = [item for item in history if item.state != "entfernt"]
+        if live:
+            raise DeployError(f"Die Regel {live[0].rule_id} ist bereits angelegt")
+        # Jede neue Anlage bekommt eine frische Kennung: Home Assistant stellt den Zustand eines entfernten
+        # optimistischen Schalters unter derselben unique_id wieder her, die Regel käme sonst ohne Schattenphase auf "an".
+        rule_id = f"r{candidate_id}" if not history else f"r{candidate_id}_{len(history) + 1}"
         room = self.cfg.rooms.get(candidate.room)
         if room is None:
             raise DeployError(f"Der Raum {candidate.room} ist in execution.yaml nicht eingetragen")
@@ -157,6 +162,12 @@ class Deployer:
         pseudo = build_pseudonyms(self.db)
         place, when, action = describe(candidate, self.acfg, pseudo, self.astore.signal_descriptions())
         description = f"{place}: {when} -> {action}"
+        for alias, entity_id in pseudo.aliases.items():        # modellseitige Pseudonyme lokal zurückübersetzen
+            description = re.sub(rf"\b{re.escape(alias)}\b", pseudo.display_name(entity_id), description)
+        if PSEUDONYM_RE.search(description):
+            raise DeployError("Die Beschreibung der Regel enthält ein Pseudonym (sig_NN oder person_N) und würde "
+                              "in Home Assistant stehen. Der Kandidat lässt sich nicht lesbar beschreiben; "
+                              "bitte neu rechnen.")
         names = helper_names(room.key)
         config_id = f"homeai_rule_{rule_id}"
         inputs = {
@@ -171,7 +182,8 @@ class Deployer:
         }
         if info.winter_toggle:
             inputs["winter_toggle"] = info.winter_toggle
-        automation = {"alias": f"KI-Regel {rule_id}: {description}", "description": candidate.hypothesis or "",
+        # Die Hypothese stammt vom Modell und nennt Pseudonyme; sie bleibt in der Datenbank und geht nie nach Home Assistant.
+        automation = {"alias": f"KI-Regel {rule_id}: {description}", "description": "",
                       "use_blueprint": {"path": self.cfg.blueprint_path, "input": inputs}}
         hints = await self._hints(rule, info)
         label = rule_label(rule_id, description)

@@ -17,6 +17,7 @@ class FakeHass:
         self.responses: dict[str, Any] = {}
         self.events: list[dict] = []
         self.events_by_type: dict[str, list[dict]] = {}
+        self.reject_events: set[str] = set()          # Ereignisarten, die der Token nicht abonnieren darf
         self.batch_events = False
         self.close_after_events = False
         self.close_after_command: str | None = None
@@ -36,6 +37,10 @@ class FakeHass:
             msg = json.loads(raw.data)
             self.received.append(msg)
             if msg["type"] == "subscribe_events":
+                if msg.get("event_type") in self.reject_events:
+                    await ws.send_json({"id": msg["id"], "type": "result", "success": False,
+                                        "error": {"code": "unauthorized", "message": "Unauthorized"}})
+                    continue
                 await ws.send_json({"id": msg["id"], "type": "result", "success": True, "result": None})
                 event_type = msg.get("event_type")
                 events = self.events if event_type in (None, "state_changed") else self.events_by_type.get(event_type, [])
