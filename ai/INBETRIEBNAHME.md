@@ -89,6 +89,8 @@ Vorher muss die **Analyse mit Modell** Kandidaten mit Status `bestanden` geliefe
 3. „Kosten freigeben“ einschalten (gilt 60 Sekunden, für einen Lauf), dann „Analyse mit Modell starten“. Das Modell formuliert aus den Scan-Ergebnissen Regeln, der Backtest prüft sie gegen die Daten.
 4. Auf „Kandidaten“: „Bestandene Kandidaten anzeigen“. Ein bestandener Kandidat ist wählbar und kann angelegt werden. „Letzter Lauf: alle Kandidaten mit Begründung“ (auch auf „Analyse“) zeigt zusätzlich die durchgefallenen mit Abdeckung, Fehlauslösungen und dem Grund (zu wenige Belege, abgelehnt, nicht prüfbar).
 
+Eine eigene Idee (etwa „person_2 kommt abends heim“) prüfst du ohne Modell mit `analysis add` (Beispiel in der [README](README.md#signale-und-automatische-voranalyse-scan)); der Kandidat erscheint danach genauso unter „Kandidaten“.
+
 Per Shell geht dasselbe:
 
 ```bash

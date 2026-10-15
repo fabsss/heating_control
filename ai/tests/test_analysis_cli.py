@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 
 import pytest
@@ -119,6 +120,46 @@ async def test_list_latest_shows_only_the_newest_run(files, fake_llm, capsys):
     assert await cli(files, "list", "--latest") == 0
     out = capsys.readouterr().out
     assert "[bestanden]" not in out and "[zu_wenig_belege]" in out and out.count("\n") == 2
+
+
+async def test_list_latest_ignores_runs_without_candidates(files, fake_llm, capsys):
+    fake_llm.responses = [answer(NOT_ENOUGH)]
+    await cli(files, "run", "--mode", "weekly")
+    assert await cli(files, "scan") == 0                    # legt einen Lauf ohne Kandidaten an
+    capsys.readouterr()
+    assert await cli(files, "list", "--latest") == 0
+    assert "[zu_wenig_belege]" in capsys.readouterr().out
+
+
+async def test_add_tests_a_candidate_from_json_without_a_model(files, fake_llm, capsys):
+    candidate = {**HABIT_EVENT, "conditions": [{"type": "time_window", "from": "16:00", "to": "20:00"}]}
+    assert await cli(files, "add", "--json", json.dumps(candidate)) == 0
+    out = capsys.readouterr().out
+    assert out.splitlines()[0].startswith("Lauf 1 (manuell): 1 Kandidat")
+    assert "Kandidat 1: " in out and "abdeckung:" in out and "fehlausloesungen:" in out
+    assert fake_llm.requests == []
+    assert await cli(files, "list", "--run", "1") == 0
+    assert "Wohnzimmer" in capsys.readouterr().out
+
+
+async def test_add_reads_a_list_from_stdin(files, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps([HABIT_TIME, NOT_ENOUGH])))
+    assert await cli(files, "add") == 0
+    out = capsys.readouterr().out
+    assert "2 Kandidaten" in out and "Kandidat 1: bestanden" in out and "Kandidat 2: zu_wenig_belege" in out
+    assert "Fälle in" in out
+
+
+async def test_add_reports_a_reason_for_what_cannot_be_checked(files, capsys):
+    assert await cli(files, "add", "--json", json.dumps({**HABIT_TIME, "room": "Keller"})) == 0
+    out = capsys.readouterr().out
+    assert "Kandidat 1: nicht_pruefbar" in out and "Keller" in out
+
+
+@pytest.mark.parametrize("text", ["", "kein json", "42", '"x"', "[]"])
+async def test_add_rejects_input_that_is_not_a_candidate(files, text, capsys):
+    assert await cli(files, "add", "--json", text) == 2
+    assert capsys.readouterr().err.startswith("Fehler:")
 
 
 async def test_list_latest_without_runs_says_so(files, capsys):
