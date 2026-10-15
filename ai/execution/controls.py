@@ -15,6 +15,7 @@ JOB_LABELS = {
     "llm_dry": "Analyse: Trockenlauf",
     "llm_run": "Analyse mit Modell starten",
     "candidates": "Bestandene Kandidaten anzeigen",
+    "latest": "Letzter Lauf: alle Kandidaten mit Begründung",
     "compare": "Läufe vergleichen",
     "deploy": "Kandidat im Schatten anlegen",
     "undeploy": "Regel entfernen",
@@ -105,13 +106,13 @@ def build_dashboard(rules: list[RuleCard], room_keys: list[str]) -> dict:
         {"title": "Regeln", "path": "regeln", "icon": "mdi:robot", "cards": rule_cards},
         {"title": "Kandidaten", "path": "kandidaten", "icon": "mdi:format-list-checks", "cards": [
             {"type": "entities", "title": "Anlegen und Entfernen", "entities": [
-                button_entity("candidates"), SELECT_CANDIDATE, button_entity("deploy"),
+                button_entity("candidates"), button_entity("latest"), SELECT_CANDIDATE, button_entity("deploy"),
                 SELECT_RULE, button_entity("undeploy")]},
             RESULT_CARD]},
         {"title": "Analyse", "path": "analyse", "icon": "mdi:chart-line", "cards": [
             {"type": "entities", "title": "Auswertung der Daten", "entities": [
                 button_entity("signals"), button_entity("scan"), SELECT_MODE, button_entity("llm_dry"), SWITCH_ARM,
-                button_entity("llm_run"), button_entity("compare")]},
+                button_entity("llm_run"), button_entity("latest"), button_entity("compare")]},
             RESULT_CARD]},
         {"title": "System", "path": "system", "icon": "mdi:cog", "cards": [
             {"type": "entities", "title": "System", "entities": [

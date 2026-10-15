@@ -97,6 +97,35 @@ async def test_list_filters_by_status(files, fake_llm, capsys):
     assert capsys.readouterr().out.count("\n") == 3
 
 
+async def test_list_shows_the_reason_of_candidates_that_did_not_pass(files, fake_llm, capsys):
+    fake_llm.responses = [answer(HABIT_TIME, NOT_ENOUGH, UNKNOWN_ROOM)]
+    await cli(files, "run", "--mode", "weekly")
+    capsys.readouterr()
+    assert await cli(files, "list") == 0
+    lines = capsys.readouterr().out.splitlines()
+    passed = next(line for line in lines if "[bestanden]" in line)
+    few = next(line for line in lines if "[zu_wenig_belege]" in line)
+    untestable = next(line for line in lines if "[nicht_pruefbar]" in line)
+    assert "grund:" not in passed
+    assert "grund: " in few and "Fälle in" in few and "Wochen" in few
+    assert "grund: " in untestable
+
+
+async def test_list_latest_shows_only_the_newest_run(files, fake_llm, capsys):
+    fake_llm.responses = [answer(HABIT_TIME), answer(NOT_ENOUGH, UNKNOWN_ROOM)]
+    await cli(files, "run", "--mode", "weekly")
+    await cli(files, "run", "--mode", "clusters")
+    capsys.readouterr()
+    assert await cli(files, "list", "--latest") == 0
+    out = capsys.readouterr().out
+    assert "[bestanden]" not in out and "[zu_wenig_belege]" in out and out.count("\n") == 2
+
+
+async def test_list_latest_without_runs_says_so(files, capsys):
+    assert await cli(files, "list", "--latest") == 1
+    assert "Noch kein Lauf" in capsys.readouterr().out
+
+
 async def test_backtest_command_recomputes_one_candidate(files, fake_llm, capsys):
     fake_llm.responses = [answer(HABIT_TIME, NOT_ENOUGH)]
     await cli(files, "run", "--mode", "weekly")

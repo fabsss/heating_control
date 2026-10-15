@@ -39,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     listing = sub.add_parser("list", help="Kandidaten anzeigen")
     listing.add_argument("--run", dest="run_id", type=int)
     listing.add_argument("--status", choices=STATUSES)
+    listing.add_argument("--latest", action="store_true", help="nur der neueste Lauf (alle Status)")
     presence = sub.add_parser("presence", help="Anwesenheit und manuelle Eingriffe gegenüberstellen")
     presence.add_argument("--classes", default="45,180",
                           help="Grenzen der Abwesenheitsklassen in Minuten, Komma getrennt (Standard 45,180)")
@@ -127,9 +128,18 @@ def _cmd_compare(store: Store, args) -> int:
 def _cmd_list(cfg, db: Database, store: Store, args) -> int:
     pseudo = build_pseudonyms(db)
     signals = store.signal_descriptions()
-    for item in store.list_candidates(run_id=args.run_id, status=args.status):
+    run_id = args.run_id
+    if args.latest:
+        runs = store.list_runs()
+        if not runs:
+            print("Noch kein Lauf vorhanden.")
+            return 1
+        run_id = runs[-1]["id"]
+    for item in store.list_candidates(run_id=run_id, status=args.status):
         room, when, action = describe(item, cfg, pseudo, signals)
         line = f"{item.id:>4}  {room}  {when}  ->  {action}  [{item.status}]"
+        if item.note and item.status != "bestanden":
+            line += f"  grund: {item.note}"
         metrics = store.results(item.id)
         if metrics:
             line += (f"  abdeckung={metrics['abdeckung']:.2f} fehlausloesungen={metrics['fehlausloesungen']:.2f} "

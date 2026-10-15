@@ -30,6 +30,7 @@ CLI_ARGS: dict[str, Callable[[dict[str, str]], list[str]]] = {
     "llm_dry": lambda sel: ["run", "--mode", sel["mode"], "--dry-run"],
     "llm_run": lambda sel: ["run", "--mode", sel["mode"]],
     "candidates": lambda sel: ["list", "--status", "bestanden"],
+    "latest": lambda sel: ["list", "--latest"],
     "compare": lambda sel: ["compare"],
 }
 

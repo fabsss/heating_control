@@ -74,14 +74,27 @@ docker exec home-ai-collector python -m collector origins --rebuild
 Das rechnet die Herkunft der bisherigen Änderungen aus den aufgezeichneten Dienstaufrufen nach (neue werden laufend berechnet). Eingriffe aus der Zeit vor der Aufzeichnung der Dienstaufrufe haben keine Herkunft.
 
 ## 6. Dashboard
-Es muss nicht von Hand gebaut werden. Der Dienst legt das Dashboard `ki-regeln` („KI-Regeln“) beim Start (sobald er mit dem Broker verbunden ist) an und aktualisiert es bei jedem `deploy`/`undeploy`. Vor der ersten Regel ist es fast leer. Die Seite „System“ hat die Knöpfe für Status, Prüfungen, Signale, Scan und Analyse.
+Es muss nicht von Hand gebaut werden. Der Dienst legt das Dashboard `ki-regeln` („KI-Regeln“) beim Start (sobald er mit dem Broker verbunden ist) an und aktualisiert es bei jedem `deploy`/`undeploy`. Vor der ersten Regel ist es fast leer. Die Seiten:
+- **Übersicht** und **System:** Status aktualisieren und Systemprüfung.
+- **Analyse:** Signale anzeigen, Scan (ohne Modell), Modus, Trockenlauf, „Kosten freigeben“, Analyse mit Modell, Läufe vergleichen.
+- **Kandidaten:** bestandene Kandidaten anzeigen, einen im Schatten anlegen, eine Regel entfernen.
+- **Regeln:** je Regel Schalter „aktiv“, Kennzahlen und Verlauf.
 
 Erscheint es nicht in der Seitenleiste: Seite neu laden, in HA unter Einstellungen → Dashboards prüfen und im Log des Dienstes nach einem Fehler beim Speichern suchen.
 
 ## 7. Erste Regel im Schattenmodus
-Vorher müssen Analyse oder Scan Kandidaten mit Status `bestanden` geliefert haben (Ablauf in der README, Abschnitte zur Analyse). Dann:
+Vorher muss die **Analyse mit Modell** Kandidaten mit Status `bestanden` geliefert haben. Der Scan ohne Modell liefert nur Assoziationen zur Ansicht, daraus entstehen keine Kandidaten. Ablauf im Dashboard auf der Seite „Analyse“:
+1. „Scan (ohne Modell)“ zeigt, welche Signale auffällig oft vor Eingriffen stehen (kostenlos).
+2. Modus `scan` wählen, „Analyse: Trockenlauf“ (prüft Prompt und geschätzte Kosten, kostet nichts).
+3. „Kosten freigeben“ einschalten (gilt 60 Sekunden, für einen Lauf), dann „Analyse mit Modell starten“. Das Modell formuliert aus den Scan-Ergebnissen Regeln, der Backtest prüft sie gegen die Daten.
+4. Auf „Kandidaten“: „Bestandene Kandidaten anzeigen“. Ein bestandener Kandidat ist wählbar und kann angelegt werden. „Letzter Lauf: alle Kandidaten mit Begründung“ (auch auf „Analyse“) zeigt zusätzlich die durchgefallenen mit Abdeckung, Fehlauslösungen und dem Grund (zu wenige Belege, abgelehnt, nicht prüfbar).
+
+Per Shell geht dasselbe:
 
 ```bash
+docker exec home-ai-collector python -m analysis run --mode scan --dry-run
+docker exec home-ai-collector python -m analysis run --mode scan
+docker exec home-ai-collector python -m analysis list --latest            # alle Kandidaten des letzten Laufs mit Grund
 docker exec home-ai-collector python -m analysis list --status bestanden
 docker exec home-ai-execution python -m execution deploy <id>
 ```
