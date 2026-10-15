@@ -68,3 +68,27 @@ async def fake_llm():
         yield fake
     finally:
         await server.close()
+
+
+from execution.config import load_execution_config  # noqa: E402
+from tests.fake_ha_rest import FakeHaRest  # noqa: E402
+
+
+@pytest.fixture
+def ecfg():
+    return load_execution_config(
+        ROOT / "config" / "execution.yaml",
+        {"HA_URL": "ws://ha.test/api/websocket", "HA_WRITE_TOKEN": "secret", "MQTT_HOST": "broker.test"},
+    )
+
+
+@pytest_asyncio.fixture
+async def fake_rest():
+    fake = FakeHaRest()
+    server = TestServer(fake.app())
+    await server.start_server()
+    fake.base = f"http://127.0.0.1:{server.port}"
+    try:
+        yield fake
+    finally:
+        await server.close()
