@@ -9,7 +9,7 @@ rooms:
   25752d3793e84768941596a2c9579f36: {key: wohnzimmer, heating_automation: automation.heating_control_living_room}
   office: {key: bastelzimmer, heating_automation: automation.heating_control_office}
 
-blueprint_path: homeai/ki_regel.yaml     # Pfad unter /config/blueprints/automation/
+blueprint_path: fabsss/ki_regel.yaml     # Pfad unter /config/blueprints/automation/
 dashboard_path: ki-regeln
 
 rule:

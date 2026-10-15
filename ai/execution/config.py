@@ -33,7 +33,7 @@ class ExecutionConfig:
     rooms: dict[str, RoomConfig]
     mqtt: MqttConfig | None = None
     timezone: str = "Europe/Berlin"
-    blueprint_path: str = "homeai/ki_regel.yaml"
+    blueprint_path: str = "fabsss/ki_regel.yaml"
     dashboard_path: str = "ki-regeln"
     min_distance_min: int = 60
     blocked_states: tuple[str, ...] = ("Vacation",)
@@ -83,7 +83,7 @@ def load_execution_config(path: str | Path, env: dict[str, str] | None = None) -
     return ExecutionConfig(
         ha_url=url, ha_token=env.get("HA_WRITE_TOKEN") or None, rooms=rooms, mqtt=mqtt,
         timezone=str(raw.get("timezone", "Europe/Berlin")),
-        blueprint_path=str(raw.get("blueprint_path", "homeai/ki_regel.yaml")),
+        blueprint_path=str(raw.get("blueprint_path", "fabsss/ki_regel.yaml")),
         dashboard_path=str(raw.get("dashboard_path", "ki-regeln")),
         min_distance_min=int(rule.get("min_distance_min", 60)),
         blocked_states=tuple(rule.get("blocked_states", ["Vacation"])),

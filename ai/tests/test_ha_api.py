@@ -79,7 +79,7 @@ async def test_delete_helper_by_name(fake_hass):
 
 
 async def test_blueprints_schedules_and_dashboard(fake_hass):
-    fake_hass.responses["blueprint/list"] = {"homeai/ki_regel.yaml": {"metadata": {"name": "KI-Regel (V1.0)"}}}
+    fake_hass.responses["blueprint/list"] = {"fabsss/ki_regel.yaml": {"metadata": {"name": "KI-Regel (V1.0)"}}}
     fake_hass.responses["schedule/list"] = [
         {"id": "heating_schedule_office", "name": "x",
          "monday": [{"from": "06:30:00", "to": "18:30:00"}], "tuesday": [{"from": "07:00:00", "to": "12:00:00"}]},
@@ -93,7 +93,7 @@ async def test_blueprints_schedules_and_dashboard(fake_hass):
     await client.connect()
     try:
         ws = HaWs(client)
-        assert await ws.blueprint_paths() == {"homeai/ki_regel.yaml"}
+        assert await ws.blueprint_paths() == {"fabsss/ki_regel.yaml"}
         assert await ws.schedule_flanks("heating_schedule_office") == {"06:30", "18:30", "07:00", "12:00"}
         assert await ws.schedule_flanks("gibt_es_nicht") == set()
         await ws.ensure_dashboard("ki-regeln", "KI-Regeln", "mdi:robot")

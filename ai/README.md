@@ -151,8 +151,8 @@ Danach Template-Entitäten neu laden, Label setzen und den Backfill der Snapshot
 
 Der Dienst `execution` legt geprüfte Regeln (Status `bestanden`) als Automationen in Home Assistant an, zunächst im **Schattenmodus** (die Regel meldet nur, was sie getan hätte), wertet sie aus und stellt alles auf dem Dashboard **KI-Regeln** bereit. Was schaltet, liegt in Home Assistant und läuft auch bei gestopptem Container weiter: Blueprint `blueprints/ki_regel.yaml`, die Schalter und der Mindestabstand nach einem Eingriff.
 
-**Einrichten (einmalig)**
-1. `blueprints/ki_regel.yaml` nach `/config/blueprints/automation/homeai/ki_regel.yaml` in Home Assistant kopieren; `heating_control.yaml` (V4.29, neue Eingabe `ki_rules_toggle`) in den Instanzen aktualisieren.
+**Einrichten (einmalig)** – ausführlich mit Prüfpunkten, Zurücknehmen und Fehlersuche in [INBETRIEBNAHME.md](INBETRIEBNAHME.md).
+1. `blueprints/ki_regel.yaml` nach `/config/blueprints/automation/fabsss/ki_regel.yaml` in Home Assistant kopieren; `heating_control.yaml` (V4.29, neue Eingabe `ki_rules_toggle`) in den Instanzen aktualisieren.
 2. In Home Assistant einen Benutzer „homeai“ (Administrator) und einen langlebigen Token anlegen; in den Stack-Variablen `HA_WRITE_TOKEN`, `MQTT_HOST`, `MQTT_USER`, `MQTT_PASSWORD` setzen (siehe `.env.example`). Image neu bauen, Stack neu deployen.
 3. Helfer und Hilfsautomationen anlegen und prüfen:
 
