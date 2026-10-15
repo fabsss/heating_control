@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.28)
+  name: Heizungssteuerung (V4.29)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
     
@@ -136,7 +136,18 @@ blueprint:
         entity:
           domain: binary_sensor
           multiple: false
-          
+    ki_rules_toggle:
+      name: (Optional) KI-Regeln erlaubt (Schalter)
+      description: >
+        Optional - Input Boolean, der die selbstlernenden KI-Regeln für diesen Heizkörper erlaubt (an) oder in den
+        Schattenmodus zwingt (aus). Diese Automation wertet den Schalter nicht aus; er ordnet dem Heizkörper
+        seinen KI-Schalter zu und wird vom Programm "execution deploy" gelesen.
+      default: []
+      selector:
+        entity:
+          domain: input_boolean
+          multiple: false
+
     # Optionaler täglicher Reset
     nightly_eco_time:
       name: Zeit für nächtliche Eco-Umschaltung
