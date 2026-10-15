@@ -15,7 +15,8 @@ import aiohttp
 from .config import Config
 from .db import Database
 from .hass_ws import HassAuthError, HassClient, HassConnectionError
-from .models import Change, parse_utc, utcnow
+from .models import AutomationRun, Change, ServiceCall, parse_utc, utcnow
+from .origins import update_origins
 from .pipeline import Pipeline
 from .registry import LabelEmpty, LabelNotFound, fetch_labeled_entities, fetch_users
 from .rules import resolve_rule
@@ -55,6 +56,42 @@ def history_to_changes(entity_id: str, states: list[dict[str, Any]]) -> list[Cha
         changes.append(Change(datetime.fromtimestamp(float(stamp), tz=timezone.utc),
                               entity_id, item["s"], item.get("a") or {}))
     return changes
+
+
+def _entity_ids(raw: Any) -> tuple[str, ...]:
+    if isinstance(raw, str):
+        return (raw,)
+    if isinstance(raw, (list, tuple)):
+        return tuple(str(item) for item in raw)
+    return ()
+
+
+def _event_time(event: dict[str, Any]) -> datetime:
+    stamp = event.get("time_fired")
+    return parse_utc(stamp) if stamp else utcnow()
+
+
+def service_call_from_event(event: dict[str, Any]) -> ServiceCall | None:
+    data = event.get("data") or {}
+    if data.get("domain") != "climate" or not data.get("service"):
+        return None
+    context = event.get("context") or {}
+    service_data = data.get("service_data") or {}
+    return ServiceCall(
+        ts=_event_time(event), domain="climate", service=str(data["service"]),
+        entity_ids=_entity_ids(service_data.get("entity_id")),
+        data={key: value for key, value in service_data.items() if key != "entity_id"},
+        context_id=context.get("id"), user_id=context.get("user_id"), parent_id=context.get("parent_id"),
+    )
+
+
+def automation_run_from_event(event: dict[str, Any]) -> AutomationRun | None:
+    data = event.get("data") or {}
+    entity_id = data.get("entity_id")
+    if not entity_id:
+        return None
+    context = event.get("context") or {}
+    return AutomationRun(_event_time(event), str(entity_id), data.get("name"), context.get("id"))
 
 
 def seconds_until(hhmm: str, tz_name: str, now: datetime) -> float:
@@ -143,9 +180,14 @@ class Collector:
         self._touch_health()
         await self.sync_registry(client)
         stream = await client.subscribe("state_changed")   # vor dem Lückenabgleich, damit nichts fehlt
+        call_stream = await client.subscribe("call_service")
+        run_stream = await client.subscribe("automation_triggered")
+        self.db.mark_capture_start("calls_since", self._now())
         await self.gap_fill(client)
         tasks = [
             asyncio.create_task(self._consume(stream)),
+            asyncio.create_task(self._consume_calls(call_stream)),
+            asyncio.create_task(self._consume_runs(run_stream)),
             asyncio.create_task(self._periodic(self.cfg.flush_interval_s, self._flush)),
             asyncio.create_task(self._periodic(1.0, self._tick)),
             asyncio.create_task(self._periodic(self.cfg.registry_sync_interval_s, self.sync_registry, client)),
@@ -194,6 +236,31 @@ class Collector:
             if change is not None:
                 self.pipeline.handle(change)
 
+    def _tracked_climates(self) -> set[str]:
+        return {entity_id for entity_id, rule in self.pipeline.rules.items() if rule.kind == "climate"}
+
+    async def _consume_calls(self, stream) -> None:
+        async for event in stream:
+            call = service_call_from_event(event)
+            if call is None:
+                continue
+            if call.entity_ids and not self._tracked_climates().intersection(call.entity_ids):
+                continue
+            try:
+                self.db.insert_service_call(call)
+            except sqlite3.Error:
+                log.exception("Dienstaufruf konnte nicht gespeichert werden")
+
+    async def _consume_runs(self, stream) -> None:
+        async for event in stream:
+            run = automation_run_from_event(event)
+            if run is None:
+                continue
+            try:
+                self.db.insert_automation_run(run)
+            except sqlite3.Error:
+                log.exception("Automationslauf konnte nicht gespeichert werden")
+
     async def _periodic(self, interval: float, function: Callable[..., Any], *args: Any) -> None:
         while True:
             await self._sleep(interval)
@@ -206,6 +273,10 @@ class Collector:
             self.pipeline.flush()
         except sqlite3.Error:
             log.exception("Schreiben in die Datenbank fehlgeschlagen, Puffer bleibt erhalten")
+        try:
+            update_origins(self.db, self._now())
+        except sqlite3.Error:
+            log.exception("Herkunft der Änderungen konnte nicht berechnet werden")
 
     def _tick(self) -> None:
         self.pipeline.tick(self._now())
