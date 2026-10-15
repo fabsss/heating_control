@@ -30,7 +30,7 @@ def load_interventions(db: Database, cfg: AnalysisConfig, *, start: datetime | N
                        end: datetime | None = None) -> list[Intervention]:
     rows = db.conn.execute(
         "SELECT ts_utc, room, entity_id, changed_attrs, new, actor_user_id FROM manual_actions "
-        "WHERE actor_class = 'manual' ORDER BY entity_id, ts_utc")
+        "WHERE actor_class IN ('manual', 'device') ORDER BY entity_id, ts_utc")
     merged: list[Intervention] = []
     last_index: dict[str, int] = {}
     last_row_ts: dict[str, datetime] = {}
