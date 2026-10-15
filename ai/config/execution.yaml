@@ -1,0 +1,31 @@
+# Freigabe und Ausführung (Teilprojekt 3). Keine Zugangsdaten:
+# HA_WRITE_TOKEN und MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASSWORD kommen aus der Umgebung.
+
+# area_id (wie in room_map) -> Schlüssel für die Helfer und Automation von heating_control des Raums.
+# Alles Weitere (Heizkörper, Wohnungszustand, Zeitplan, KI-Schalter) liest "execution deploy" aus dieser Automation.
+rooms:
+  a05f1cd02cf34142af915331271a6986: {key: bad, heating_automation: automation.heating_control_bathroom}
+  ee532a5799b5440691fdcc87e3354f9b: {key: schlafzimmer, heating_automation: automation.heating_control_bedroom}
+  25752d3793e84768941596a2c9579f36: {key: wohnzimmer, heating_automation: automation.heating_control_living_room}
+  office: {key: bastelzimmer, heating_automation: automation.heating_control_office}
+
+blueprint_path: homeai/ki_regel.yaml     # Pfad unter /config/blueprints/automation/
+dashboard_path: ki-regeln
+
+rule:
+  min_distance_min: 60                   # Mindestabstand nach einem Eingriff
+  blocked_states: [Vacation]             # Wohnungszustände, in denen eine Regel nichts setzt
+  setpoint_min: 15
+  setpoint_max: 25
+
+evaluation:
+  before_min: 60                         # Auswertungsfenster vor der Auslösung
+  after_min: 90                          # und danach
+  target_tolerance: 0.5                  # Sollwerte gelten bis zu diesem Abstand (°C) als gleich
+  min_scored: 10                         # gewertete Auslösungen für das Signal "grün"
+  max_fail_rate: 0.2                     # Fehlauslösungs- bzw. Korrekturquote für "grün"
+
+jobs:
+  llm_runs_per_day: 3
+  arm_seconds: 60                        # Dauer der Kosten-Freigabe
+  output_limit: 12000                    # Zeichen je Ergebnistext im Dashboard
