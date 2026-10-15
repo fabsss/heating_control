@@ -13,7 +13,8 @@ from .config import Config, ConfigError, load_config
 from .db import Database
 from .hass_ws import HassAuthError, HassClient, HassConnectionError
 from .live import Collector
-from .models import parse_utc
+from .models import parse_utc, utcnow
+from .origins import update_origins
 from .registry import LabelEmpty, LabelNotFound, fetch_labeled_entities
 from .verify import verify_logged_events
 
@@ -35,6 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
     purge = sub.add_parser("purge-entity", help="alle Daten einer Entität endgültig löschen")
     purge.add_argument("entity_id")
     purge.add_argument("--yes", action="store_true")
+    origins = sub.add_parser("origins", help="Herkunft der Thermostat-Änderungen berechnen (nach einem Backfill neu rechnen)")
+    origins.add_argument("--rebuild", action="store_true", help="alle Zeilen neu berechnen")
     return parser
 
 
@@ -87,7 +90,7 @@ def _cmd_backfill(cfg: Config, args: argparse.Namespace) -> int:
     finally:
         db.close()
     print(f"Gelesen: {result.rows_read}, neu gespeichert: {result.rows_inserted}, "
-          f"Zeitraum: {result.first_ts} bis {result.last_ts}")
+          f"Kontext ergänzt: {result.rows_enriched}, Zeitraum: {result.first_ts} bis {result.last_ts}")
     return 0
 
 
@@ -123,6 +126,16 @@ def _cmd_purge(cfg: Config, args: argparse.Namespace) -> int:
         db.close()
 
 
+def _cmd_origins(cfg: Config, args: argparse.Namespace) -> int:
+    db = Database(cfg.database)
+    try:
+        count = update_origins(db, utcnow(), rebuild=args.rebuild)
+    finally:
+        db.close()
+    print(f"Herkunft berechnet für {count} Zeilen")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     args = build_parser().parse_args(argv)
@@ -136,6 +149,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_backfill(cfg, args)
         if args.command == "verify":
             return _cmd_verify(cfg, args)
+        if args.command == "origins":
+            return _cmd_origins(cfg, args)
         return _cmd_purge(cfg, args)
     except (ConfigError, FileNotFoundError, LabelNotFound, LabelEmpty, HassAuthError, HassConnectionError,
             UnsupportedSchema, CorruptDatabase) as exc:

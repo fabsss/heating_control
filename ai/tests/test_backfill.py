@@ -121,6 +121,48 @@ def test_backfilled_user_change_shows_up_in_manual_actions(cfg, db, tmp_path):
         "manual", USER_FABIAN, "temperature")
 
 
+def test_backfill_reports_rows_that_only_got_their_context_added(cfg, db, tmp_path):
+    ha = build_ha_db(tmp_path / "home-assistant_v2.db", [
+        row("climate.bt", "heat", 1767261600.0, CLIMATE_ATTRS),
+        row("climate.bt", "heat", 1767261720.0, {**CLIMATE_ATTRS, "temperature": 21}, ctx=CTX, user=USER_FABIAN),
+    ])
+    rules = rules_for(cfg, "climate.bt")
+    from collector.models import Change
+    db.upsert_entity(rules["climate.bt"], "buero", datetime(2026, 1, 1, tzinfo=timezone.utc))
+    db.insert_changes([                                       # wie aus dem Lückenabgleich: ohne Kontext
+        Change(datetime.fromtimestamp(1767261720.0, tz=timezone.utc), "climate.bt", "heat",
+               {"temperature": 21, "preset_mode": "none", "hvac_action": "idle",
+                "current_temperature": 20.0, "window_open": False}),
+    ], "gap:history_api")
+    result = backfill_ha_db(ha, db, rules, {"climate.bt": "buero"})
+    assert (result.rows_inserted, result.rows_enriched) == (1, 1)
+    again = backfill_ha_db(ha, db, rules, {"climate.bt": "buero"})
+    assert (again.rows_inserted, again.rows_enriched) == (0, 0)
+
+
+def test_backfill_gives_labeled_entities_their_room_since_the_beginning(cfg, db, tmp_path):
+    ha = build_ha_db(tmp_path / "home-assistant_v2.db", [
+        row("climate.bt", "heat", 1767261600.0, CLIMATE_ATTRS),
+        row("climate.trv_office", "heat", 1767261600.0, CLIMATE_ATTRS),
+    ])
+    entries = [HistoryMapEntry("climate.trv_office", "buero", valid_to="2026-01-02T00:00:00+00:00")]
+    backfill_with_map(cfg, db, [EntityInfo("climate.bt", None, "buero")], entries, ha)
+    rooms = {r["entity_id"]: (r["room"], r["valid_from"], r["valid_to"])
+             for r in db.conn.execute("SELECT entity_id, room, valid_from, valid_to FROM room_map")}
+    assert rooms["climate.bt"] == ("buero", "", None)
+    assert rooms["climate.trv_office"] == ("buero", "", "2026-01-02T00:00:00+00:00")   # unverändert
+
+
+def test_backfill_keeps_a_live_room_move_and_backdates_the_first_row(cfg, db, tmp_path):
+    ha = build_ha_db(tmp_path / "home-assistant_v2.db", [row("climate.bt", "heat", 1767261600.0, CLIMATE_ATTRS)])
+    db.sync_room("climate.bt", "buero", "climate", datetime(2026, 5, 1, tzinfo=timezone.utc))
+    db.sync_room("climate.bt", "flur", "climate", datetime(2026, 6, 1, tzinfo=timezone.utc))
+    backfill_with_map(cfg, db, [EntityInfo("climate.bt", None, "flur")], [], ha)
+    rows = db.conn.execute("SELECT room, valid_from, valid_to FROM room_map ORDER BY valid_from").fetchall()
+    assert [(r["room"], r["valid_from"], r["valid_to"] is None) for r in rows] == [
+        ("buero", "", False), ("flur", "2026-06-01T00:00:00.000000+00:00", True)]
+
+
 def test_history_map_loads_entries_and_rejects_unknown_keys(tmp_path):
     good = tmp_path / "h.yaml"
     good.write_text(

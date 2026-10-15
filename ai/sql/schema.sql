@@ -53,18 +53,64 @@ CREATE TABLE IF NOT EXISTS ingest_runs(
   started_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS service_calls(
+  id          INTEGER PRIMARY KEY,
+  ts_utc      TEXT NOT NULL,
+  domain      TEXT NOT NULL,
+  service     TEXT NOT NULL,
+  entity_ids  TEXT NOT NULL DEFAULT '[]',          -- JSON-Liste, leer = Ziel über Bereich/Gerät
+  data        TEXT NOT NULL DEFAULT '{}',
+  context_id  TEXT,
+  user_id     TEXT,
+  parent_id   TEXT,
+  UNIQUE(ts_utc, domain, service, entity_ids, context_id)
+);
+CREATE INDEX IF NOT EXISTS idx_calls_ts ON service_calls(ts_utc);
+CREATE INDEX IF NOT EXISTS idx_calls_ctx ON service_calls(context_id);
+
+CREATE TABLE IF NOT EXISTS automation_runs(
+  id                INTEGER PRIMARY KEY,
+  ts_utc            TEXT NOT NULL,
+  automation_entity TEXT NOT NULL,
+  name              TEXT,
+  context_id        TEXT,
+  UNIQUE(ts_utc, automation_entity, context_id)
+);
+CREATE INDEX IF NOT EXISTS idx_runs_ctx ON automation_runs(context_id);
+
+CREATE TABLE IF NOT EXISTS change_origin(
+  state_change_id INTEGER PRIMARY KEY,
+  origin          TEXT NOT NULL,                   -- benutzer|automation|geraet_unklar|unbekannt
+  via             TEXT NOT NULL,                   -- kontext|zeit|keine
+  actor           TEXT,                            -- Benutzerkennung bei "benutzer"
+  automation      TEXT                             -- Entity-ID der Automation bei "automation"
+);
+
+CREATE TABLE IF NOT EXISTS capture_state(
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 DROP VIEW IF EXISTS manual_actions;
 CREATE VIEW manual_actions AS
 WITH base AS (
-  SELECT sc.ts_utc, sc.entity_id, e.domain, e.room, sc.state AS new_state,
+  SELECT sc.id AS change_id, sc.ts_utc, sc.entity_id, e.domain,
+         COALESCE((SELECT rm.room FROM room_map rm
+                   WHERE rm.entity_id = sc.entity_id
+                     AND (rm.valid_from = '' OR rm.valid_from <= sc.ts_utc)
+                     AND (rm.valid_to IS NULL OR sc.ts_utc < rm.valid_to)
+                   ORDER BY rm.valid_from DESC LIMIT 1), e.room) AS room,
+         sc.state AS new_state,
          json_extract(sc.attrs, '$.temperature') AS new_temp,
          json_extract(sc.attrs, '$.preset_mode') AS new_preset,
          LAG(sc.state) OVER w AS old_state,
          LAG(json_extract(sc.attrs, '$.temperature')) OVER w AS old_temp,
          LAG(json_extract(sc.attrs, '$.preset_mode')) OVER w AS old_preset,
-         sc.context_user_id, sc.context_parent_id
+         sc.context_user_id, sc.context_parent_id,
+         co.origin AS origin, co.actor AS origin_actor, co.automation AS origin_automation
   FROM state_changes sc
   JOIN entities e ON e.entity_id = sc.entity_id
+  LEFT JOIN change_origin co ON co.state_change_id = sc.id
   WHERE e.kind = 'climate'
   WINDOW w AS (PARTITION BY sc.entity_id ORDER BY sc.ts_utc, sc.id)
 ), diff AS (
@@ -78,12 +124,19 @@ WITH base AS (
   FROM base
   WHERE old_state IS NOT NULL
 )
-SELECT ts_utc, domain, room, entity_id, changed AS changed_attrs,
+SELECT change_id, ts_utc, domain, room, entity_id, changed AS changed_attrs,
        json_object('temperature', old_temp, 'preset_mode', old_preset, 'hvac_mode', old_state) AS old,
        json_object('temperature', new_temp, 'preset_mode', new_preset, 'hvac_mode', new_state) AS new,
-       CASE WHEN context_parent_id IS NOT NULL THEN 'automation'
-            WHEN context_user_id IS NOT NULL THEN 'manual'
-            ELSE 'unknown' END AS actor_class,
-       context_user_id AS actor_user_id
+       CASE origin
+         WHEN 'benutzer' THEN 'manual'
+         WHEN 'automation' THEN 'automation'
+         WHEN 'geraet_unklar' THEN 'device'
+         WHEN 'unbekannt' THEN 'unknown'
+         ELSE CASE WHEN context_parent_id IS NOT NULL THEN 'automation'
+                   WHEN context_user_id IS NOT NULL THEN 'manual'
+                   ELSE 'unknown' END
+       END AS actor_class,
+       COALESCE(origin_actor, context_user_id) AS actor_user_id,
+       origin_automation
 FROM diff
 WHERE changed <> '';

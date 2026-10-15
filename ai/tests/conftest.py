@@ -5,6 +5,8 @@ import pytest_asyncio
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
+from analysis.config import load_analysis_config
+from analysis.store import Store
 from collector.config import load_config
 from collector.db import Database
 from tests.fake_hass import FakeHass
@@ -21,10 +23,20 @@ def cfg():
 
 
 @pytest.fixture
+def acfg():
+    return load_analysis_config(ROOT / "config" / "analysis.yaml")
+
+
+@pytest.fixture
 def db():
     database = Database(":memory:")
     yield database
     database.close()
+
+
+@pytest.fixture
+def store(db):
+    return Store(db)
 
 
 @pytest_asyncio.fixture
@@ -35,6 +47,47 @@ async def fake_hass():
     server = TestServer(app)
     await server.start_server()
     fake.url = f"ws://127.0.0.1:{server.port}/api/websocket"
+    try:
+        yield fake
+    finally:
+        await server.close()
+
+from tests.fake_openrouter import FakeOpenRouter  # noqa: E402
+
+
+@pytest_asyncio.fixture
+async def fake_llm():
+    fake = FakeOpenRouter()
+    app = web.Application()
+    app.router.add_post("/api/v1/chat/completions", fake.handler)
+    app.router.add_get("/api/v1/models", fake.models_handler)
+    server = TestServer(app)
+    await server.start_server()
+    fake.url = f"http://127.0.0.1:{server.port}/api/v1/chat/completions"
+    try:
+        yield fake
+    finally:
+        await server.close()
+
+
+from execution.config import load_execution_config  # noqa: E402
+from tests.fake_ha_rest import FakeHaRest  # noqa: E402
+
+
+@pytest.fixture
+def ecfg():
+    return load_execution_config(
+        ROOT / "config" / "execution.yaml",
+        {"HA_URL": "ws://ha.test/api/websocket", "HA_WRITE_TOKEN": "secret", "MQTT_HOST": "broker.test"},
+    )
+
+
+@pytest_asyncio.fixture
+async def fake_rest():
+    fake = FakeHaRest()
+    server = TestServer(fake.app())
+    await server.start_server()
+    fake.base = f"http://127.0.0.1:{server.port}"
     try:
         yield fake
     finally:

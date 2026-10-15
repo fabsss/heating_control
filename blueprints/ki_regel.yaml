@@ -1,0 +1,277 @@
+blueprint:
+  name: KI-Regel (V1.0)
+  description: >
+    Eine vom Programm "execution deploy" angelegte Regel der KI-Analyse für einen Heizkörper.
+    Die Regel setzt ein Preset oder einen Sollwert, wenn ihr Auslöser feuert, nur wenn Raumschalter und Regelschalter
+    an sind, der Sammelschalter nicht gesetzt ist, der Wohnungszustand nicht gesperrt ist und der letzte Eingriff
+    mindestens den Mindestabstand zurückliegt. Sonst meldet sie nur, was sie getan hätte (Schattenmodus).
+    Jede Auslösung wird auf homeai/rule/<id>/fired gemeldet.
+  domain: automation
+  source_url: https://github.com/fabsss/heating_control/blob/main/blueprints/ki_regel.yaml
+  homeassistant:
+    min_version: 2024.10.0
+  input:
+    rule_id:
+      name: Regel-ID
+      selector:
+        text: {}
+    heating_entity:
+      name: Heizkörper
+      selector:
+        entity:
+          domain: climate
+    room_toggle:
+      name: Raumschalter (KI-Regeln erlaubt)
+      selector:
+        entity:
+          domain: input_boolean
+    rule_toggle:
+      name: Regelschalter (aktiv, sonst Schatten)
+      selector:
+        entity:
+          domain: switch
+    stop_toggle:
+      name: Sammelschalter (alle Regeln in Schatten)
+      selector:
+        entity:
+          domain: input_boolean
+    flat_state:
+      name: Wohnungszustand
+      selector:
+        entity:
+          domain: input_select
+    blocked_states:
+      name: Gesperrte Wohnungszustände
+      default:
+        - Vacation
+      selector:
+        select:
+          multiple: true
+          custom_value: true
+          options: []
+    winter_toggle:
+      name: (Optional) Heizung An/Aus (Winter-Modus)
+      default: []
+      selector:
+        entity:
+          domain: input_boolean
+          multiple: false
+    heating_automation:
+      name: Automation von heating_control für diesen Raum
+      selector:
+        entity:
+          domain: automation
+    last_intervention:
+      name: Zeitpunkt des letzten Eingriffs
+      selector:
+        entity:
+          domain: input_datetime
+    min_distance_min:
+      name: Mindestabstand nach einem Eingriff (Minuten)
+      default: 60
+      selector:
+        number:
+          min: 0
+          max: 720
+          step: 5
+          unit_of_measurement: min
+    setpoint_min:
+      name: Kleinster erlaubter Sollwert
+      default: 15
+      selector:
+        number:
+          min: 5
+          max: 30
+          step: 0.5
+          unit_of_measurement: "°C"
+    setpoint_max:
+      name: Größter erlaubter Sollwert
+      default: 25
+      selector:
+        number:
+          min: 5
+          max: 30
+          step: 0.5
+          unit_of_measurement: "°C"
+    delay_min:
+      name: Verzögerung nach dem Auslöser (Minuten)
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 120
+          unit_of_measurement: min
+    action_kind:
+      name: Art der Aktion
+      default: preset
+      selector:
+        select:
+          options:
+            - preset
+            - setpoint
+    action_preset:
+      name: Preset
+      default: ""
+      selector:
+        text: {}
+    action_setpoint:
+      name: Sollwert
+      default: 21
+      selector:
+        number:
+          min: 5
+          max: 30
+          step: 0.5
+          unit_of_measurement: "°C"
+    rule_triggers:
+      name: Auslöser
+      selector:
+        trigger: {}
+    rule_conditions:
+      name: Bedingungen
+      default: []
+      selector:
+        condition: {}
+
+mode: single
+max_exceeded: silent
+
+variables:
+  rule_id: !input rule_id
+  heating_entity: !input heating_entity
+  room_toggle: !input room_toggle
+  rule_toggle: !input rule_toggle
+  stop_toggle: !input stop_toggle
+  flat_state: !input flat_state
+  blocked_states: !input blocked_states
+  winter_toggle: !input winter_toggle
+  heating_automation: !input heating_automation
+  last_intervention: !input last_intervention
+  min_distance_min: !input min_distance_min
+  setpoint_min: !input setpoint_min
+  setpoint_max: !input setpoint_max
+  delay_min: !input delay_min
+  action_kind: !input action_kind
+  action_preset: !input action_preset
+  action_setpoint: !input action_setpoint
+
+triggers: !input rule_triggers
+conditions: !input rule_conditions
+
+actions:
+  - alias: Verzögerung
+    if:
+      - condition: template
+        value_template: "{{ (delay_min | int(0)) > 0 }}"
+    then:
+      - delay:
+          minutes: "{{ delay_min | int(0) }}"
+
+  - alias: Auf heating_control warten
+    if:
+      - condition: template
+        value_template: >-
+          {{ (state_attr(heating_automation, 'current') | int(0)) > 0
+             or (as_timestamp(now()) - (state_attr(heating_automation, 'last_triggered') | as_timestamp(0))) < 120 }}
+    then:
+      - wait_template: "{{ (state_attr(heating_automation, 'current') | int(0)) == 0 }}"
+        timeout: "00:02:00"
+        continue_on_timeout: true
+      - delay: "00:00:05"
+
+  - alias: Bedingungen erneut prüfen
+    condition: and
+    conditions: !input rule_conditions
+
+  - alias: Entscheidung
+    variables:
+      hvac_now: "{{ states(heating_entity) }}"
+      preset_now: "{{ state_attr(heating_entity, 'preset_mode') }}"
+      temp_now: "{{ state_attr(heating_entity, 'temperature') }}"
+      target_value: >-
+        {{ action_preset if action_kind == 'preset'
+           else ([[action_setpoint | float(0), setpoint_min | float(15)] | max, setpoint_max | float(25)] | min) }}
+      unreachable: "{{ hvac_now in ['unavailable', 'unknown'] }}"
+      state_blocked: >-
+        {{ states(flat_state) in blocked_states
+           or (winter_toggle != [] and is_state(winter_toggle, 'off')) }}
+      already_there: >-
+        {{ (preset_now == action_preset) if action_kind == 'preset'
+           else (temp_now is not none and ((temp_now | float(0)) - (target_value | float(0))) | abs < 0.01) }}
+      since_intervention_min: >-
+        {{ ((as_timestamp(now()) - (state_attr(last_intervention, 'timestamp') | float(0))) / 60) | round(1) }}
+      too_close: "{{ since_intervention_min < (min_distance_min | float(60)) }}"
+      switches_on: >-
+        {{ is_state(room_toggle, 'on') and is_state(rule_toggle, 'on') and is_state(stop_toggle, 'off') }}
+      reason: >-
+        {{ 'nicht_erreichbar' if unreachable
+           else 'wohnungszustand' if state_blocked
+           else 'bereits_erreicht' if already_there
+           else 'handeingriff' if too_close
+           else 'raum_aus' if is_state(room_toggle, 'off')
+           else 'schatten' if not switches_on
+           else '' }}
+      will_act: "{{ reason == '' }}"
+      mode: "{{ 'aktiv' if switches_on else 'schatten' }}"
+      payload: >-
+        {{ {'ts': now().isoformat(), 'rule_id': rule_id, 'room': heating_entity, 'mode': mode,
+            'result': 'ausgefuehrt' if will_act else 'nicht_ausgefuehrt', 'reason': reason,
+            'target': {'kind': action_kind, 'value': target_value},
+            'current': {'preset': preset_now, 'temperature': temp_now, 'hvac_mode': hvac_now}} | to_json }}
+
+  - alias: Ausführen
+    if:
+      - condition: template
+        value_template: "{{ will_act }}"
+    then:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ action_kind == 'preset' }}"
+            sequence:
+              - action: climate.set_preset_mode
+                continue_on_error: true
+                target:
+                  entity_id: "{{ heating_entity }}"
+                data:
+                  preset_mode: "{{ action_preset }}"
+        default:
+          - if:
+              - condition: template
+                value_template: "{{ hvac_now == 'off' }}"
+            then:
+              - action: climate.set_hvac_mode
+                continue_on_error: true
+                target:
+                  entity_id: "{{ heating_entity }}"
+                data:
+                  hvac_mode: heat
+              - wait_template: "{{ states(heating_entity) != 'off' }}"
+                timeout: "00:00:10"
+                continue_on_timeout: true
+              - action: climate.set_temperature
+                continue_on_error: true
+                target:
+                  entity_id: "{{ heating_entity }}"
+                data:
+                  temperature: "{{ target_value }}"
+              - action: climate.set_hvac_mode
+                continue_on_error: true
+                target:
+                  entity_id: "{{ heating_entity }}"
+                data:
+                  hvac_mode: "{{ hvac_now }}"
+            else:
+              - action: climate.set_temperature
+                continue_on_error: true
+                target:
+                  entity_id: "{{ heating_entity }}"
+                data:
+                  temperature: "{{ target_value }}"
+
+  - alias: Meldung
+    action: mqtt.publish
+    data:
+      topic: "homeai/rule/{{ rule_id }}/fired"
+      payload: "{{ payload }}"
+      qos: 1

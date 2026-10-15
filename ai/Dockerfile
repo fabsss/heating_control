@@ -4,5 +4,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY collector ./collector
+COPY analysis ./analysis
+COPY execution ./execution
 COPY sql ./sql
+COPY config ./config
 CMD ["python", "-m", "collector", "run"]

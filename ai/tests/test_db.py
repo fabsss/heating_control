@@ -42,6 +42,27 @@ def test_insert_changes_is_idempotent_and_counts_new_rows(db: Database):
     assert db.count_changes("climate.bt") == 2
 
 
+def test_insert_changes_adds_missing_context_to_existing_row(db: Database):
+    db.upsert_entity(rule(), "buero", T0)
+    plain = Change(T0, "climate.bt", "heat", {"temperature": 21})
+    with_context = Change(T0, "climate.bt", "heat", {"temperature": 21}, "c1", "u1", None)
+    assert db.insert_changes([plain], "gap:history_api") == 1
+    assert db.insert_changes([with_context], "backfill:a.db") == 0     # keine neue Zeile
+    row = db.conn.execute("SELECT context_id, context_user_id, source FROM state_changes").fetchone()
+    assert (row["context_id"], row["context_user_id"]) == ("c1", "u1")
+    assert db.count_changes("climate.bt") == 1
+
+
+def test_insert_changes_does_not_overwrite_existing_context(db: Database):
+    db.upsert_entity(rule(), "buero", T0)
+    first = Change(T0, "climate.bt", "heat", {"temperature": 21}, "c1", "u1", None)
+    second = Change(T0, "climate.bt", "heat", {"temperature": 21}, "c2", "u2", None)
+    db.insert_changes([first], "live")
+    db.insert_changes([second], "backfill:a.db")
+    row = db.conn.execute("SELECT context_id, context_user_id FROM state_changes").fetchone()
+    assert (row["context_id"], row["context_user_id"]) == ("c1", "u1")
+
+
 def test_insert_changes_lowers_tracked_since(db: Database):
     db.upsert_entity(rule(), "buero", T0 + timedelta(days=10))
     db.insert_changes([change(0, temperature=17)], "backfill:a.db")
@@ -86,6 +107,31 @@ def test_sync_room_closes_old_row_when_area_changes(db: Database):
     db.sync_room("climate.bt", "flur", "climate", T0 + timedelta(hours=2))
     rows = db.conn.execute("SELECT room, valid_from, valid_to FROM room_map ORDER BY valid_from").fetchall()
     assert [(r["room"], r["valid_to"] is None) for r in rows] == [("buero", False), ("flur", True)]
+
+
+def test_extend_room_to_beginning_creates_row_when_none_exists(db: Database):
+    db.extend_room_to_beginning("climate.bt", "buero", "climate")
+    row = db.conn.execute("SELECT room, role, valid_from, valid_to FROM room_map").fetchone()
+    assert tuple(row) == ("buero", "climate", "", None)
+
+
+def test_extend_room_to_beginning_backdates_the_first_live_row(db: Database):
+    db.sync_room("climate.bt", "buero", "climate", T0 + timedelta(days=100))
+    db.extend_room_to_beginning("climate.bt", "buero", "climate")
+    db.extend_room_to_beginning("climate.bt", "buero", "climate")       # idempotent
+    rows = db.conn.execute("SELECT room, valid_from, valid_to FROM room_map").fetchall()
+    assert [tuple(r) for r in rows] == [("buero", "", None)]
+    db.sync_room("climate.bt", "buero", "climate", T0 + timedelta(days=101))   # nichts Neues
+    assert db.conn.execute("SELECT COUNT(*) FROM room_map").fetchone()[0] == 1
+
+
+def test_extend_room_to_beginning_only_changes_the_earliest_of_several_rows(db: Database):
+    db.sync_room("climate.bt", "buero", "climate", T0)
+    db.sync_room("climate.bt", "flur", "climate", T0 + timedelta(days=30))
+    db.extend_room_to_beginning("climate.bt", "flur", "climate")
+    rows = db.conn.execute("SELECT room, valid_from FROM room_map ORDER BY valid_from").fetchall()
+    assert [(r["room"], r["valid_from"]) for r in rows] == [
+        ("buero", ""), ("flur", "2026-01-31T10:00:00.000000+00:00")]
 
 
 def test_add_history_room_is_idempotent(db: Database):

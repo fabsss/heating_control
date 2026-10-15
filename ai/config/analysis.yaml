@@ -1,0 +1,76 @@
+# Regeln der Analyse (Teilprojekt 2). Enthält keine Zugangsdaten:
+# Der Schlüssel kommt aus der Umgebungsvariable OPENROUTER_API_KEY.
+model: "anthropic/claude-sonnet-4.5"      # OpenRouter-Modell-ID; vor dem ersten Lauf gegen die Modellliste prüfen
+openrouter_url: "https://openrouter.ai/api/v1/chat/completions"
+provider:                                  # Datenschutz: nur Anbieter ohne Datenspeicherung (zdr darf nicht false werden)
+  zdr: true
+  data_collection: "deny"
+price_per_mtok: {input: 3.0, output: 15.0}   # USD je Million Token, nur für die Kostenschätzung vor dem Aufruf
+max_output_tokens: 8000
+max_cost_usd: 2.0                          # Kostenlimit je Lauf
+temperature: 0.2
+request_timeout_s: 180
+retries: 3                                 # Wiederholungen bei Netzfehlern
+retry_backoff_s: 2.0
+max_candidates: 20
+timezone: "Europe/Berlin"
+min_interventions: 20                      # darunter endet der Lauf ohne Aufruf
+merge_interventions_s: 60
+
+# area_id (wie in room_map) -> Klartextname für das Modell
+room_names:
+  a05f1cd02cf34142af915331271a6986: "Bad"
+  office: "Bastelzimmer"
+  flur: "Flur"
+  12f2b49ac8b049e98d4a10a1fe8766fb: "Küche"
+  ee532a5799b5440691fdcc87e3354f9b: "Schlafzimmer"
+  25752d3793e84768941596a2c9579f36: "Wohnzimmer"
+
+# Zeiträume, die nicht gewertet werden (keine echte Regelung)
+exclusions:
+  # Schlafzimmer: Homematic-Thermostate am 2026-03-16 deaktiviert, neue Thermostate erst später.
+  # Das Ende ist das Datum des Thermostattauschs und beim Einrichten anzupassen.
+  - {room: ee532a5799b5440691fdcc87e3354f9b, from: "2026-03-16T00:00:00+00:00", to: "2026-09-15T00:00:00+00:00"}
+
+# Entitäten, aus denen der Kontext zu einem Zeitpunkt gelesen wird
+context:
+  flat_state: input_select.flat_occupation_state
+  in_bed: input_boolean.someone_in_bed
+  office_day: binary_sensor.office_day_template
+  outside_temperature: sensor.environment_sensor_outside_temperature
+
+# Beschreibungen für das Modell (statt aus Namen abgeleitet). Keine Klarnamen verwenden.
+signal_labels:
+  sensor.pixel_9a_next_alarm: "Weckzeit (nächster Wecker, Gerät 1)"
+  sensor.sm_s901b_next_alarm: "Weckzeit (nächster Wecker, Gerät 2)"
+  sensor.fabians_mobile_alarmclock_triggered: "Wecker klingelt (Person 1)"
+  sensor.svenjas_mobile_alarmclock_triggered: "Wecker klingelt (Person 2)"
+
+# Automatische Voranalyse: Signale, Ereignisse, Kontrolle, Signifikanz
+scan:
+  min_events: 8
+  min_hits: 4
+  q_max: 0.1
+  top_k: 40
+  min_room_interventions: 10
+  duration_edges: [45, 180]
+  control_days: 7
+  max_values: 12
+  min_value_count: 8
+
+clusters:
+  min_size: 3
+  window_min: 90                           # Breite des Zeitfensters (±45 Minuten)
+  weekday_groups:
+    werktage: [0, 1, 2, 3, 4]
+    wochenende: [5, 6]
+
+backtest:
+  match_window_min: 30
+  contrary_window_min: 60
+  setpoint_tolerance: 0.5
+  min_faelle: 5
+  min_wochen: 3
+  min_abdeckung: 0.3
+  max_fehlausloesungen: 0.4
+  active_gap_days: 21                      # nur Zeiträume werten, in denen im Raum überhaupt eingegriffen wird

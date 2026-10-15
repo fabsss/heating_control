@@ -66,3 +66,23 @@ class Change:
     context_id: str | None = None
     context_user_id: str | None = None
     context_parent_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ServiceCall:
+    ts: datetime
+    domain: str
+    service: str
+    entity_ids: tuple[str, ...] = ()
+    data: dict[str, Any] = field(default_factory=dict)
+    context_id: str | None = None
+    user_id: str | None = None
+    parent_id: str | None = None
+
+
+@dataclass(frozen=True)
+class AutomationRun:
+    ts: datetime
+    automation_entity: str
+    name: str | None = None
+    context_id: str | None = None
