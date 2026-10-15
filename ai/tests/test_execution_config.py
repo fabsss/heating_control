@@ -17,7 +17,7 @@ def test_shipped_config_loads_with_defaults():
     assert (cfg.setpoint_min, cfg.setpoint_max) == (15.0, 25.0)
     assert (cfg.eval_before_min, cfg.eval_after_min, cfg.target_tolerance) == (60, 90, 0.5)
     assert (cfg.min_scored, cfg.max_fail_rate, cfg.llm_runs_per_day) == (10, 0.2, 3)
-    assert cfg.blueprint_path == "homeai/ki_regel.yaml" and cfg.dashboard_path == "ki-regeln"
+    assert cfg.blueprint_path == "fabsss/ki_regel.yaml" and cfg.dashboard_path == "ki-regeln"
     rooms = {room.key: room for room in cfg.rooms.values()}
     assert set(rooms) == {"bad", "schlafzimmer", "wohnzimmer", "bastelzimmer"}
     assert rooms["bad"].heating_automation == "automation.heating_control_bathroom"

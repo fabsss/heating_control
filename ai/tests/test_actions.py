@@ -41,7 +41,7 @@ async def test_live_actions_talk_to_home_assistant(db, acfg, ecfg, ha):
     text = await actions.deploy(candidate_id)
     assert "r1" in text and "Schattenmodus" in text and "homeai_rule_r1" in ha.rest.automations
     assert "Regeln: 1 angelegt" in await actions.status()
-    assert "Blueprint homeai/ki_regel.yaml" in await actions.check()
+    assert "Blueprint fabsss/ki_regel.yaml" in await actions.check()
     await actions.refresh_dashboard()
     assert dashboards.saved
     assert "entfernt" in await actions.undeploy("r1")

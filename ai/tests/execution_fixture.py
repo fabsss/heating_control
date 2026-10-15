@@ -70,7 +70,7 @@ def seed_home_assistant(fake_rest, fake_hass, *, toggle=TOGGLE):
     fake_rest.set_state(HEATING_AUTOMATION, "on", id="hc_bad")
     fake_rest.automations["hc_bad"] = {"alias": "Heating Control - Bathroom",
                                        "use_blueprint": {"path": "heating_control.yaml", "input": inputs}}
-    fake_hass.responses["blueprint/list"] = {"homeai/ki_regel.yaml": {}}
+    fake_hass.responses["blueprint/list"] = {"fabsss/ki_regel.yaml": {}}
     fake_hass.responses["schedule/list"] = [
         {"id": "heating_schedule_bathroom", "monday": [{"from": "06:30:00", "to": "08:00:00"}]}]
     return helpers, dashboards

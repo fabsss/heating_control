@@ -20,7 +20,7 @@ docker build -t home-ai-collector ai
 Das Image enthält Collector und Ausführung (derselbe Code, zwei Container).
 
 ## 2. Dateien in Home Assistant
-1. `blueprints/ki_regel.yaml` nach `/config/blueprints/automation/homeai/ki_regel.yaml` kopieren (Ordner `homeai` anlegen). Der Pfad muss zu `blueprint_path` in `ai/config/execution.yaml` passen.
+1. `blueprints/ki_regel.yaml` nach `/config/blueprints/automation/fabsss/ki_regel.yaml` kopieren oder per Import einspielen (dort liegt auch `heating_control.yaml`). Der Pfad muss zu `blueprint_path` in `ai/config/execution.yaml` passen.
 2. `heating_control.yaml` auf V4.29 aktualisieren, in jeder Instanz (Bad, Schlafzimmer, Wohnzimmer, Bastelzimmer). Neu ist nur die optionale Eingabe „KI-Regeln erlaubt (Schalter)“; das Verhalten ändert sich nicht. Den Schalter trägst du erst in Schritt 5 ein.
 3. Blueprints in HA neu laden oder HA kurz neu laden (Entwicklerwerkzeuge → YAML), damit der neue Blueprint erscheint.
 
@@ -106,7 +106,7 @@ Nur dort prüfbar; die Checkliste steht im Plan unter Aufgabe 19 (`docs/superpow
 | Symptom | Prüfen |
 |---|---|
 | `init` meldet Automation nicht lesbar | Entity-ID in `execution.yaml` (`heating_automation`) und dass die Automation aus dem Blueprint `heating_control` stammt |
-| `check`: Blueprint fehlt | Pfad `/config/blueprints/automation/homeai/ki_regel.yaml`, Blueprints neu geladen |
+| `check`: Blueprint fehlt | Pfad `/config/blueprints/automation/fabsss/ki_regel.yaml`, Blueprints neu geladen |
 | Dashboard-Knöpfe ohne Wirkung | Log `home-ai-execution`; MQTT-Zugang; Status `homeai/status` im MQTT-Explorer |
 | Keine Herkunft in der Datenbank | Log des Collectors auf „nicht abonnierbar“; `HA_TOKEN` braucht Administratorrolle |
 | Regel schaltet nicht | Raumschalter, Regelschalter, Sammelschalter, Wohnungszustand `Vacation`, letzter Eingriff unter 60 Minuten (die Karte zeigt den Grund) |

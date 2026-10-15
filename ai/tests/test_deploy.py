@@ -61,7 +61,7 @@ async def test_deploy_creates_the_rule_in_shadow_mode(world):
     result = await world.deployer.deploy(world.candidate_id)
     assert result.rule_id == "r1" and result.automation_entity.startswith("automation.ki_regel_r1")
     blueprint = world.fake_rest.automations["homeai_rule_r1"]["use_blueprint"]
-    assert blueprint["path"] == "homeai/ki_regel.yaml"
+    assert blueprint["path"] == "fabsss/ki_regel.yaml"
     inputs = blueprint["input"]
     assert inputs["rule_id"] == "r1" and inputs["heating_entity"] == CLIMATE
     assert inputs["rule_toggle"] == "switch.homeai_r1_aktiv" and inputs["room_toggle"] == TOGGLE
@@ -202,7 +202,7 @@ async def test_undeploy_removes_everything_but_the_history(world):
 async def test_check_reports_what_is_missing_and_what_is_fine(world):
     lines = await world.deployer.check()
     assert any(line.startswith("FEHLT") and "Sammelschalter" in line for line in lines)
-    assert any(line.startswith("OK    ") and "Blueprint homeai/ki_regel.yaml" in line for line in lines)
+    assert any(line.startswith("OK    ") and "Blueprint fabsss/ki_regel.yaml" in line for line in lines)
     await world.deployer.init("bad")
     for entity in (f"input_boolean.{STOP_NAME}", TOGGLE, "input_datetime.ki_eingriff_bad", "input_datetime.ki_aufruf_bad"):
         world.fake_rest.set_state(entity, "on")
