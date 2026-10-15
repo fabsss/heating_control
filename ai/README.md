@@ -146,3 +146,34 @@ template:
 ```
 
 Danach Template-Entitäten neu laden, Label setzen und den Backfill der Snapshots wiederholen (idempotent).
+
+## Freigabe und Ausführung (Teilprojekt 3)
+
+Der Dienst `execution` legt geprüfte Regeln (Status `bestanden`) als Automationen in Home Assistant an, zunächst im **Schattenmodus** (die Regel meldet nur, was sie getan hätte), wertet sie aus und stellt alles auf dem Dashboard **KI-Regeln** bereit. Was schaltet, liegt in Home Assistant und läuft auch bei gestopptem Container weiter: Blueprint `blueprints/ki_regel.yaml`, die Schalter und der Mindestabstand nach einem Eingriff.
+
+**Einrichten (einmalig)**
+1. `blueprints/ki_regel.yaml` nach `/config/blueprints/automation/homeai/ki_regel.yaml` in Home Assistant kopieren; `heating_control.yaml` (V4.29, neue Eingabe `ki_rules_toggle`) in den Instanzen aktualisieren.
+2. In Home Assistant einen Benutzer „homeai“ (Administrator) und einen langlebigen Token anlegen; in den Stack-Variablen `HA_WRITE_TOKEN`, `MQTT_HOST`, `MQTT_USER`, `MQTT_PASSWORD` setzen (siehe `.env.example`). Image neu bauen, Stack neu deployen.
+3. Helfer und Hilfsautomationen anlegen und prüfen:
+
+```bash
+docker exec home-ai-execution python -m execution init
+docker exec home-ai-execution python -m execution check
+```
+
+`init` nennt je Raum den Helfer, den du in der `heating_control`-Instanz unter „KI-Regeln erlaubt (Schalter)“ einträgst. Danach `collector origins --rebuild` ausführen, damit die Herkunft der Änderungen aus den Dienstaufrufen berechnet wird (neue Änderungen werden laufend berechnet).
+
+**Normalbetrieb: Dashboard „KI-Regeln“**
+Scan, Analyse (Trockenlauf und mit Modell), Kandidaten ansehen, Regeln anlegen und entfernen, Systemprüfung und Status laufen über Knöpfe auf dem Dashboard (ein Auftrag zur Zeit). Die Analyse mit dem Modell kostet Geld: zuerst „Kosten freigeben“ einschalten (gilt 60 Sekunden, nur für einen Lauf), höchstens 3 Läufe je Tag (`execution.yaml`). Weiter in der Shell nötig: Backfill eines Snapshots, Änderungen an den Konfigurationsdateien, Update und Neustart des Containers.
+
+**Kommandos (Einrichtung und Fehlersuche)**
+
+```bash
+docker exec home-ai-execution python -m execution rules                 # angelegte Regeln mit Kennzahlen
+docker exec home-ai-execution python -m execution deploy 12             # Kandidat 12 im Schattenmodus anlegen
+docker exec home-ai-execution python -m execution undeploy r12          # Regel entfernen (Historie bleibt)
+```
+
+**Regeln und Schalter.** Eine Regel schaltet nur, wenn der Raumschalter („KI-Regeln erlaubt“), ihr eigener Schalter „aktiv“ an und der Sammelschalter „alle Regeln in Schatten“ aus sind, der Wohnungszustand nicht `Vacation` ist (und der Winter-Modus an) und der letzte Eingriff im Raum mindestens 60 Minuten zurückliegt. In `Away` und `Sleep` darf sie ein Preset oder einen Sollwert setzen; die Heizung schaltet sie nie ein.
+
+**Kennzahlen.** Im Schatten zählt ein Eingriff im Raum zwischen 60 Minuten vor und 90 Minuten nach der Auslösung (der letzte entscheidet): gleiches Ziel = Treffer, anderes Ziel = Fehlauslösung, keiner = neutral. Bei aktiven Regeln: kein Eingriff = bestätigt, anderes Ziel = korrigiert. Das Signal „grün“ gilt ab 10 gewerteten Auslösungen und weniger als 20 % Fehl- bzw. Korrekturquote. Alle Schwellen stehen in `config/execution.yaml`.

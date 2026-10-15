@@ -27,3 +27,32 @@ services:
       timeout: 10s
       retries: 3
       start_period: 90s
+
+  # Freigabe und Ausführung der KI-Regeln (Teilprojekt 3): legt Regeln in Home Assistant an, wertet sie aus,
+  # bedient das Dashboard "KI-Regeln". Selbes Image wie der Collector (zuvor `docker build -t home-ai-collector ai`).
+  execution:
+    image: home-ai-collector
+    container_name: home-ai-execution
+    restart: unless-stopped
+    command: ["python", "-m", "execution", "serve"]
+    depends_on:
+      - collector
+    environment:
+      HA_URL: ${HA_URL:?HA_URL fehlt}
+      # Eigener Token (Schreibrechte: Automationen, Helfer, Dashboard anlegen), getrennt vom lesenden HA_TOKEN des Collectors
+      HA_WRITE_TOKEN: ${HA_WRITE_TOKEN:?HA_WRITE_TOKEN fehlt}
+      MQTT_HOST: ${MQTT_HOST:?MQTT_HOST fehlt}
+      MQTT_PORT: ${MQTT_PORT:-1883}
+      MQTT_USER: ${MQTT_USER:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      # Für die Aufträge "Analyse mit Modell" im Dashboard
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      OPENROUTER_PRICE_INPUT: ${OPENROUTER_PRICE_INPUT:-}
+      OPENROUTER_PRICE_OUTPUT: ${OPENROUTER_PRICE_OUTPUT:-}
+      EXECUTION_CONFIG: /app/config/execution.yaml
+      ANALYSIS_CONFIG: /app/config/analysis.yaml
+      DB_PATH: /data/home_ai.sqlite
+      TZ: Europe/Berlin
+    volumes:
+      - /mnt/data/nobackup/homeassistant/ai:/data
