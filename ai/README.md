@@ -133,6 +133,19 @@ docker exec home-ai-collector python -m analysis run --mode scan --dry-run
 docker exec home-ai-collector python -m analysis run --mode scan
 ```
 
+**Eigene Kandidaten prüfen (`add`):** Hast du selbst eine Idee, etwa einen Auslöser mit einer Uhrzeit als Bedingung, formulierst du sie im JSON des Modells und lässt sie mit demselben Backtest und denselben Schwellen prüfen. Es gibt keinen Modellaufruf und keine Kosten. Raum als Klartextname, Personen als `person_n`, Signale als `sig_nn` (siehe `signals`), bis zu zwei Bedingungen. Das Ergebnis steht in `list` und, wenn es besteht, unter „Kandidaten“ im Dashboard.
+
+```bash
+docker exec -i home-ai-collector python -m analysis add <<'EOF'
+{"room": "Wohnzimmer", "hypothesis": "person_2 kommt abends heim",
+ "trigger": {"type": "event", "event": "person_arrives", "person": "person_2"},
+ "conditions": [{"type": "time_window", "from": "17:00", "to": "21:00"}],
+ "action": {"type": "setpoint", "value": 21}}
+EOF
+```
+
+Statt eines Objekts geht auch eine Liste (mehrere Zeitfenster auf einmal vergleichen). Das Vokabular steht im Kopf von `analysis/vocabulary.py` und `analysis/generic.py`.
+
 Beschreibungen für das Modell stehen in `signal_labels:` in `analysis.yaml` (keine Klarnamen). Die Grenzen des Scans (`min_events`, `min_hits`, `q_max`, `top_k`, Dauerklassen) stehen unter `scan:`.
 
 **Wecker:** Die beiden `*_next_alarm`-Sensoren (Zeitstempel) liefern das Ereignis „Weckzeit erreicht“. Die beiden `*_alarmclock_triggered`-Sensoren sind Template-Sensoren aus der `configuration.yaml` und brauchen ein `unique_id`, damit sie in der Registry stehen und das Label tragen können:

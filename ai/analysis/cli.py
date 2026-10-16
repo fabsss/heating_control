@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -16,8 +17,8 @@ from .features import room_name
 from .presence import analyze as analyze_presence, render as render_presence
 from .llm import LlmError, estimate_cost, with_live_prices
 from .pseudonym import build_pseudonyms
-from .runner import (MODES, AnalysisError, TooFewInterventions, backtest_candidate, load_environment, prepare,
-                     run_analysis)
+from .runner import (MODES, AnalysisError, TooFewInterventions, add_manual_candidates, backtest_candidate,
+                     load_environment, prepare, run_analysis)
 from .scan import run_scan
 from .store import Store
 
@@ -39,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     listing = sub.add_parser("list", help="Kandidaten anzeigen")
     listing.add_argument("--run", dest="run_id", type=int)
     listing.add_argument("--status", choices=STATUSES)
+    listing.add_argument("--latest", action="store_true", help="nur der neueste Lauf (alle Status)")
     presence = sub.add_parser("presence", help="Anwesenheit und manuelle Eingriffe gegenüberstellen")
     presence.add_argument("--classes", default="45,180",
                           help="Grenzen der Abwesenheitsklassen in Minuten, Komma getrennt (Standard 45,180)")
@@ -46,6 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
     scan = sub.add_parser("scan", help="Assoziationen zwischen Ereignissen und Eingriffen suchen (ohne Modell)")
     scan.add_argument("--room", help="nur dieser Raum (Klartextname)")
     scan.add_argument("--top", type=int, default=30, help="so viele Zeilen anzeigen (Standard 30)")
+    add = sub.add_parser("add", help="selbst formulierte Kandidaten prüfen (Backtest, ohne Modell, ohne Kosten)")
+    add.add_argument("--json", help="Kandidat als JSON-Objekt oder Liste; ohne Angabe von der Standardeingabe lesen")
     backtest = sub.add_parser("backtest", help="Backtest eines Kandidaten erneut rechnen")
     backtest.add_argument("candidate_id", type=int)
     backtest.add_argument("--from", dest="since")
@@ -127,9 +131,18 @@ def _cmd_compare(store: Store, args) -> int:
 def _cmd_list(cfg, db: Database, store: Store, args) -> int:
     pseudo = build_pseudonyms(db)
     signals = store.signal_descriptions()
-    for item in store.list_candidates(run_id=args.run_id, status=args.status):
+    run_id = args.run_id
+    if args.latest:
+        with_candidates = [row["id"] for row in store.list_runs() if store.list_candidates(run_id=row["id"])]
+        if not with_candidates:
+            print("Noch kein Lauf vorhanden.")
+            return 1
+        run_id = with_candidates[-1]
+    for item in store.list_candidates(run_id=run_id, status=args.status):
         room, when, action = describe(item, cfg, pseudo, signals)
         line = f"{item.id:>4}  {room}  {when}  ->  {action}  [{item.status}]"
+        if item.note and item.status != "bestanden":
+            line += f"  grund: {item.note}"
         metrics = store.results(item.id)
         if metrics:
             line += (f"  abdeckung={metrics['abdeckung']:.2f} fehlausloesungen={metrics['fehlausloesungen']:.2f} "
@@ -193,6 +206,36 @@ def _cmd_scan(cfg, db: Database, store: Store, args) -> int:
     return 0
 
 
+def _candidates_from_text(text: str) -> list:
+    try:
+        parsed = json.loads(text)
+    except ValueError as exc:
+        raise AnalysisError(f"Die Eingabe ist kein gültiges JSON: {exc}") from exc
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    if not isinstance(parsed, list) or not parsed:
+        raise AnalysisError("Erwartet wird ein Kandidat (JSON-Objekt) oder eine nicht leere Liste davon.")
+    return parsed
+
+
+def _cmd_add(cfg, db: Database, store: Store, args) -> int:
+    raws = _candidates_from_text(args.json if args.json is not None else sys.stdin.read())
+    summary = add_manual_candidates(db, cfg, raws)
+    pseudo, signals = build_pseudonyms(db), store.signal_descriptions()
+    count = len(summary.candidate_ids)
+    print(f"Lauf {summary.run_id} (manuell): {count} {'Kandidat' if count == 1 else 'Kandidaten'}")
+    for candidate_id in summary.candidate_ids:
+        candidate = store.get_candidate(candidate_id)
+        room, when, action = describe(candidate, cfg, pseudo, signals)
+        print(f"Kandidat {candidate_id}: {candidate.status}")
+        print(f"  {room}  {when}  ->  {action}")
+        if candidate.note:
+            print(f"  {candidate.note}")
+        for name, value in store.results(candidate_id).items():
+            print(f"  {name}: {value:g}")
+    return 0
+
+
 def _cmd_backtest(cfg, db: Database, args) -> int:
     start, end = _period(args)
     outcome = backtest_candidate(db, cfg, args.candidate_id, start=start, end=end)
@@ -224,6 +267,8 @@ def main(argv: list[str] | None = None) -> int:
                 return _cmd_compare(store, args)
             if args.command == "list":
                 return _cmd_list(cfg, db, store, args)
+            if args.command == "add":
+                return _cmd_add(cfg, db, store, args)
             return _cmd_backtest(cfg, db, args)
         finally:
             db.close()

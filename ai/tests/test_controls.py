@@ -20,8 +20,13 @@ def test_every_job_has_a_button_with_its_command_topic():
     for name in JOB_LABELS:
         payload = found[button_entity(name)]
         assert payload["command_topic"] == f"homeai/cmd/{name}" and payload["payload_press"] == "PRESS"
-    assert set(JOB_LABELS) == {"status", "signals", "scan", "llm_dry", "llm_run", "candidates", "compare", "deploy",
-                               "undeploy", "check"}
+    assert set(JOB_LABELS) == {"status", "signals", "scan", "llm_dry", "llm_run", "candidates", "latest", "compare",
+                               "deploy", "undeploy", "check"}
+
+
+def test_the_dashboard_offers_the_latest_run_next_to_the_passed_candidates():
+    views = {view["path"]: str(view) for view in build_dashboard([], ["bad"])["views"]}
+    assert button_entity("latest") in views["kandidaten"] and button_entity("latest") in views["analyse"]
 
 
 def test_selects_carry_their_options_and_fall_back_to_a_placeholder():

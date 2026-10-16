@@ -51,6 +51,11 @@ async def test_start_publishes_idle_and_the_selection(w):
     assert w.bus.retained["homeai/sel/mode/state"] == "scan"
 
 
+async def test_latest_lists_every_candidate_of_the_newest_run(w):
+    await press(w, "latest")
+    assert w.executor.calls == [["list", "--latest"]]
+
+
 async def test_scan_runs_the_cli_and_reports_the_output(w):
     await press(w, "scan")
     assert w.executor.calls == [["scan"]]

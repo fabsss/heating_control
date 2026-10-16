@@ -87,6 +87,15 @@ def load_environment(db: Database, cfg: AnalysisConfig, start: datetime | None =
     return Environment(start, end, pseudo, ctx, load_interventions(db, cfg, start=start, end=end), library)
 
 
+def build_parse_context(db: Database, env: Environment, cfg: AnalysisConfig, *, scanning: bool) -> ParseContext:
+    rooms = {room_name(cfg, area): area for area in {item.room for item in env.interventions}}
+    presets = known_presets(db) | {str(item.value) for item in env.interventions if item.kind == "preset"}
+    return ParseContext(rooms=rooms, pseudo=env.pseudo, presets=frozenset(presets),
+                        flat_states=frozenset(env.ctx.flat_state.states()),
+                        signals=env.signals.infos() if scanning else {},
+                        max_conditions=2 if scanning else None)
+
+
 def prepare(db: Database, cfg: AnalysisConfig, mode: str, *, start: datetime | None = None,
             end: datetime | None = None) -> Prepared:
     if mode not in MODES:
@@ -111,14 +120,9 @@ def prepare(db: Database, cfg: AnalysisConfig, mode: str, *, start: datetime | N
         if not data["cluster"]:
             raise NothingToAnalyze(
                 f"Keine Cluster mit mindestens {cfg.clusters.min_size} Eingriffen gefunden.")
-    rooms = {room_name(cfg, area): area for area in {item.room for item in env.interventions}}
-    presets = known_presets(db) | {str(item.value) for item in env.interventions if item.kind == "preset"}
-    flat_states = env.ctx.flat_state.states()
     scanning = mode == "scan"
-    parse_ctx = ParseContext(rooms=rooms, pseudo=env.pseudo, presets=frozenset(presets),
-                             flat_states=frozenset(flat_states),
-                             signals=env.signals.infos() if scanning else {},
-                             max_conditions=2 if scanning else None)
+    parse_ctx = build_parse_context(db, env, cfg, scanning=scanning)
+    rooms, presets, flat_states = parse_ctx.rooms, parse_ctx.presets, parse_ctx.flat_states
     vocabulary = generic_vocabulary_text() if scanning else vocabulary_text()
     messages = build_messages(mode, data, vocabulary, cfg.max_candidates, presets=sorted(presets),
                               flat_states=sorted(flat_states), rooms=sorted(rooms))
@@ -168,6 +172,44 @@ async def run_analysis(db: Database, cfg: AnalysisConfig, mode: str, *, api_key:
         raise
     return RunSummary(run_id, mode, len(candidates), dict(counts), result.cost_usd,
                       result.tokens_in, result.tokens_out)
+
+
+@dataclass
+class ManualSummary:
+    run_id: int
+    candidate_ids: list[int]
+    by_status: dict[str, int]
+
+
+def add_manual_candidates(db: Database, cfg: AnalysisConfig, raws: list, *, now=utcnow) -> ManualSummary:
+    """Prüft selbst formulierte Kandidaten wie die des Modells (gleiches Vokabular, gleicher Backtest), ohne Aufruf."""
+    if not raws:
+        raise AnalysisError("Kein Kandidat angegeben.")
+    env = load_environment(db, cfg)
+    store = Store(db)
+    store.save_pseudonyms(env.pseudo.to_rows())
+    store.commit()
+    candidates = parse_candidates(raws, build_parse_context(db, env, cfg, scanning=True))
+    tester = Backtester(cfg, env.interventions, env.ctx, env.start, env.end)
+    run_id = store.start_run("manuell", "manuell", {"von": to_utc_iso(env.start), "bis": to_utc_iso(env.end),
+                                                    "eingriffe": len(env.interventions)}, now())
+    counts: Counter[str] = Counter()
+    ids: list[int] = []
+    try:
+        for candidate in candidates:
+            outcome = tester.evaluate(candidate) if candidate.status == STATUS_OPEN else None
+            if outcome is not None:
+                candidate.status, candidate.note = outcome.status, outcome.note
+            ids.append(store.add_candidate(run_id, candidate))
+            if outcome is not None and outcome.metrics:
+                store.save_results(ids[-1], outcome.metrics)
+            counts[candidate.status] += 1
+        store.finish_run(run_id, "abgeschlossen", now())
+    except Exception as exc:
+        store.rollback()
+        store.finish_run(run_id, "fehlgeschlagen", now(), error=str(exc)[:500])
+        raise
+    return ManualSummary(run_id, ids, dict(counts))
 
 
 def backtest_candidate(db: Database, cfg: AnalysisConfig, candidate_id: int, *,
