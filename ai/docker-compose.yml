@@ -12,6 +12,11 @@ services:
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
       OPENROUTER_PRICE_INPUT: ${OPENROUTER_PRICE_INPUT:-}
       OPENROUTER_PRICE_OUTPUT: ${OPENROUTER_PRICE_OUTPUT:-}
+      # Langfuse (Tracing und Prompt-Verwaltung der Analyse); leer = aus
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      APP_VERSION: ${APP_VERSION:-}
       COLLECTOR_CONFIG: /app/config/collector.yaml
       HEALTH_FILE: /tmp/collector.health
       TZ: Europe/Berlin
@@ -50,6 +55,11 @@ services:
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
       OPENROUTER_PRICE_INPUT: ${OPENROUTER_PRICE_INPUT:-}
       OPENROUTER_PRICE_OUTPUT: ${OPENROUTER_PRICE_OUTPUT:-}
+      # Langfuse (Tracing und Prompt-Verwaltung der Analyse); leer = aus
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      APP_VERSION: ${APP_VERSION:-}
       EXECUTION_CONFIG: /app/config/execution.yaml
       ANALYSIS_CONFIG: /app/config/analysis.yaml
       DB_PATH: /data/home_ai.sqlite
