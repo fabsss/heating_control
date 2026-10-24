@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from dataclasses import dataclass, replace
 
 import aiohttp
 
 from .config import AnalysisConfig
+from .langfuse import current_trace
 
 
 class LlmError(Exception):
@@ -102,6 +104,23 @@ def _result(body: str, cfg: AnalysisConfig) -> LlmResult:
 async def complete(cfg: AnalysisConfig, messages: list[dict], api_key: str, *,
                    sleep=asyncio.sleep) -> LlmResult:
     """Ein Aufruf mit Zero Data Retention. Netzfehler und 429/5xx werden wiederholt."""
+    trace = current_trace.get()
+    started, attempts = time.time(), [0]
+    try:
+        result = await _complete(cfg, messages, api_key, sleep=sleep, attempts=attempts)
+    except BaseException as exc:
+        trace.generation("llm", started=started, ended=time.time(), model=cfg.model, input=messages,
+                         output=None, error=f"{type(exc).__name__}: {str(exc)[:200]}", prompt="system",
+                         metadata={"attempts": attempts[0]})
+        raise
+    trace.generation("llm", started=started, ended=time.time(), model=cfg.model, input=messages,
+                     output=result.text, tokens_in=result.tokens_in, tokens_out=result.tokens_out,
+                     cost_usd=result.cost_usd, prompt="system", metadata={"attempts": attempts[0]})
+    return result
+
+
+async def _complete(cfg: AnalysisConfig, messages: list[dict], api_key: str, *, sleep, attempts: list[int]
+                    ) -> LlmResult:
     payload = {
         "model": cfg.model,
         "messages": messages,
@@ -116,6 +135,7 @@ async def complete(cfg: AnalysisConfig, messages: list[dict], api_key: str, *,
     last: Exception | None = None
     async with aiohttp.ClientSession(timeout=timeout) as session:
         for attempt in range(cfg.retries + 1):
+            attempts[0] = attempt + 1
             try:
                 async with session.post(cfg.openrouter_url, json=payload, headers=headers) as response:
                     status, body = response.status, await response.text()
@@ -160,14 +180,20 @@ async def request_candidates(cfg: AnalysisConfig, messages: list[dict], api_key:
     """Fragt Kandidaten an; bei ungültiger Antwort genau ein Wiederholungsversuch mit der Fehlermeldung."""
     total = LlmResult("", 0, 0, 0.0)
     current = list(messages)
+    trace = current_trace.get()
     for attempt in range(2):
-        _check_cost(current, cfg, total.cost_usd)
+        try:
+            _check_cost(current, cfg, total.cost_usd)
+        except CostLimitExceeded as exc:
+            trace.span("cost_check", output={"bisher_usd": total.cost_usd}, error=str(exc))
+            raise
         result = await complete(cfg, current, api_key, sleep=sleep)
         total = LlmResult(result.text, total.tokens_in + result.tokens_in,
                           total.tokens_out + result.tokens_out, total.cost_usd + result.cost_usd)
         try:
             return parse_candidates_json(result.text, cfg.max_candidates), total
         except InvalidResponse as exc:
+            trace.span("parse_response", input=result.text, error=str(exc)[:200], metadata={"versuch": attempt + 1})
             if attempt == 1:
                 exc.partial = total
                 raise
