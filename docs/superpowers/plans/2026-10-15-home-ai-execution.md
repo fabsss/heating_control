@@ -6336,7 +6336,7 @@ Diese Aufgabe hat keinen automatischen Test. Sie prüft, was nur die echte HA ze
   - Home Assistant neu starten: Die Zustände der Regelschalter (optimistisch) bleiben erhalten. Tun sie es nicht, Spezifikation Abschnitt 7 anpassen (Zustand als `input_boolean` je Regel).
 
 - [ ] **Step 8: Aufzeichnung der Automationen (offene Punkte der Spezifikation)**
-  - In `/tmp/lausch.log` (oder mit einem neuen Lauscher) die Zeitplan-Flanke des Büros (18:30) und die Umschaltung um 01:00 prüfen: Die Aufrufe erscheinen als `call_service` ohne Benutzerkennung, mit derselben Kontext-ID wie die Zustandszeile in der Datenbank. In `change_origin` stehen sie als `automation` mit dem Namen der Automation.
+  - Die Umschaltung um 01:00 in `service_calls` und `change_origin` prüfen (kein Lauscher nötig): Die Aufrufe erscheinen ohne Benutzerkennung, mit derselben Kontext-ID wie die Zustandszeile; in `change_origin` stehen sie als `automation` mit dem Namen der Automation. Am 24.10. bestätigt. Die Zeitplan-Flanke ist erst prüfbar, sobald ein Zeitplan aktiv ist (der Wert 18:30 war nur ein Testbeispiel).
   - Ein Preset-Wechsel per Dashboard-Button und per Kachel steht als `benutzer`; Drehen am Gerät als `geraet_unklar`.
 
 - [ ] **Step 9: Aufträge mit dem Modell**
