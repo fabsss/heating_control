@@ -109,7 +109,8 @@ Nur dort prüfbar; die Checkliste steht im Plan unter Aufgabe 19 (`docs/superpow
 - Entfernen und erneutes Anlegen einer Regel bei eingeschaltetem Schalter: die neue Regel startet im Schatten.
 - Container stoppen: aktive Regeln und `heating_control` laufen weiter, das Dashboard zeigt „Container offline“.
 - Preset und Sollwert im Modus `off` (Wechsel `Away` → `Coming Home`).
-- Die Aufrufe von Zeitplan-Flanke und der Umschaltung um 01:00 erscheinen ohne Benutzerkennung und mit derselben Kontext-ID wie die Zustandszeile.
+- Die Umschaltung um 01:00 erscheint in `service_calls` ohne Benutzerkennung und mit derselben Kontext-ID wie die Zustandszeile, in `change_origin` als `automation` (bestätigt am 24.10.). Dasselbe gilt für die Flanke eines Zeitplans, sobald einer aktiv ist; vorher ist dort nichts zu erwarten.
+- Die Automation „TRV – Log actor with exact context“ (Blueprint `log_trv_actor_with_context.yaml`) wird nicht mehr gebraucht und kann aus bleiben: Sie füllt `automation_runs` mit Rauschen, und nur `collector verify` liest ihr Ereignis.
 
 ## Zurücknehmen
 - **Eine Regel:** `docker exec home-ai-execution python -m execution undeploy r<id>` (Automation und Entitäten werden entfernt, die Historie bleibt in der Datenbank).
