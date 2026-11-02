@@ -112,6 +112,18 @@ Die Regeln liegen in `config/analysis.yaml` (Modell, Kostenlimit, Schwellen des 
 
 Die Preise holt `analysis run` selbst aus der öffentlichen OpenRouter-Modellliste (`/api/v1/models`, ohne Schlüssel) und gibt sie vor dem Lauf auf stderr aus, z. B. `Preise: 3.00 / 15.00 USD je Million Token (OpenRouter)`. Reihenfolge: Umgebungsvariablen, dann OpenRouter, dann `price_per_mtok` in `analysis.yaml` (Rückfall, wenn OpenRouter nicht erreichbar ist oder das Modell nicht kennt). Die Preise gehen nur in die Kostenschätzung vor dem Aufruf ein; abgerechnet wird nach den Kosten, die OpenRouter im Ergebnis meldet.
 
+### Langfuse (Tracing und Prompt-Verwaltung)
+
+Ist Langfuse eingerichtet, ist jeder Lauf ein Trace `analysis_run`: Schritte `prepare`, `parse_candidates` und `backtest`, der Modellaufruf als Generation (Prompt, Antwort, Token, Kosten, Fehler) und zwei Scores (`kandidaten_bestanden`, `kandidaten_pruefbar`). Gesendet wird am Ende des Laufs, bevor der Prozess endet. Langfuse v4 nimmt Traces nur über OpenTelemetry an (`/api/public/otel/v1/traces`); die alte Ingestion-Schnittstelle lehnt sie ab. Der Export baut die OTLP-Nachricht selbst, ohne SDK.
+
+| Variable | Pflicht | Bedeutung |
+|---|---|---|
+| `LANGFUSE_BASE_URL` (auch `LANGFUSE_HOST`) | nein | Adresse von Langfuse; leer = alles aus |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | nein | Schlüssel des Projekts `heating-control` |
+| `APP_VERSION` | nein | erscheint als Release |
+
+Die vier Prompts (`heating/system`, `heating/mode-weekly`, `heating/mode-scan`, `heating/mode-clusters`) legt der erste Lauf je Prozess in Langfuse an, falls sie fehlen. Danach gilt bei jedem Lauf die Version mit dem Label `production`; bei jedem Problem gilt der Prompt aus dem Code. Die benutzten Langfuse-Versionen stehen in den Parametern des Laufs (`prompt_versionen`). Die Daten im Prompt sind pseudonymisiert und werden vor dem Senden auf schützenswerte Begriffe geprüft; dieselben Inhalte liegen so auch in Langfuse.
+
 Modell oder Schlüssel ändern: Variable im Stack (Dockhand) anpassen und den Stack neu deployen. Für einen einzelnen Lauf mit anderem Modell: `docker exec -e OPENROUTER_MODEL='vendor/modell' home-ai-collector python -m analysis run --mode weekly`.
 
 Hinweise:

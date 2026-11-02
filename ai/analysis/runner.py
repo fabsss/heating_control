@@ -12,11 +12,13 @@ from .backtest import Backtester, BacktestResult
 from .config import AnalysisConfig
 from .context import ContextProvider
 from .generic import generic_vocabulary_text
+from .langfuse import trace_scope
 from .features import build_clusters, build_weekly, data_period, known_presets, room_name
 from .interventions import load_interventions
 from .llm import request_candidates
-from .models import STATUS_OPEN, STATUS_UNTESTABLE, Association, Intervention
-from .prompts import build_messages
+from .models import STATUS_OPEN, STATUS_PASSED, STATUS_UNTESTABLE, Association, Intervention
+from .prompt_registry import ResolvedPrompt, resolve_all
+from .prompts import PROMPT_SPECS, build_messages
 from .pseudonym import Pseudonyms, build_pseudonyms
 from .scan import association_row, run_scan
 from .signals import SignalLibrary
@@ -97,7 +99,7 @@ def build_parse_context(db: Database, env: Environment, cfg: AnalysisConfig, *, 
 
 
 def prepare(db: Database, cfg: AnalysisConfig, mode: str, *, start: datetime | None = None,
-            end: datetime | None = None) -> Prepared:
+            end: datetime | None = None, prompts: dict[str, ResolvedPrompt] | None = None) -> Prepared:
     if mode not in MODES:
         raise ValueError(f"unbekannter Modus {mode!r} (erlaubt: {', '.join(MODES)})")
     env = load_environment(db, cfg, start, end)
@@ -125,7 +127,7 @@ def prepare(db: Database, cfg: AnalysisConfig, mode: str, *, start: datetime | N
     rooms, presets, flat_states = parse_ctx.rooms, parse_ctx.presets, parse_ctx.flat_states
     vocabulary = generic_vocabulary_text() if scanning else vocabulary_text()
     messages = build_messages(mode, data, vocabulary, cfg.max_candidates, presets=sorted(presets),
-                              flat_states=sorted(flat_states), rooms=sorted(rooms))
+                              flat_states=sorted(flat_states), rooms=sorted(rooms), prompts=prompts)
     leaks = env.pseudo.leaks("\n".join(message["content"] for message in messages))
     if leaks:
         raise PrivacyLeak(f"Der zu sendende Text enthält schützenswerte Begriffe: {', '.join(leaks)}")
@@ -135,7 +137,35 @@ def prepare(db: Database, cfg: AnalysisConfig, mode: str, *, start: datetime | N
 async def run_analysis(db: Database, cfg: AnalysisConfig, mode: str, *, api_key: str,
                        start: datetime | None = None, end: datetime | None = None,
                        now=utcnow, completer=request_candidates) -> RunSummary:
-    prepared = prepare(db, cfg, mode, start=start, end=end)
+    """Ein Lauf ist in Langfuse ein Trace; ohne Langfuse-Einrichtung wirkungslos."""
+    async with trace_scope("analysis_run", session_id=f"analyse-{mode}-{now().strftime('%Y%m%d-%H%M%S')}",
+                           input={"modus": mode, "modell": cfg.model},
+                           metadata={"mode": mode, "model": cfg.model}) as trace:
+        summary = await _run_analysis(db, cfg, mode, api_key=api_key, start=start, end=end, now=now,
+                                      completer=completer, trace=trace)
+        trace.output = {"run_id": summary.run_id, "kandidaten": summary.candidates,
+                        "status": summary.by_status, "kosten_usd": summary.cost_usd,
+                        "tokens_in": summary.tokens_in, "tokens_out": summary.tokens_out}
+        total = summary.candidates
+        if total:
+            # Qualität des Laufs: Anteil der Kandidaten, die den Backtest bestehen, und Anteil prüfbarer
+            passed = summary.by_status.get(STATUS_PASSED, 0)
+            trace.score("kandidaten_bestanden", passed / total, f"{passed} von {total}")
+            trace.score("kandidaten_pruefbar", 1 - summary.by_status.get(STATUS_UNTESTABLE, 0) / total)
+        return summary
+
+
+async def _run_analysis(db: Database, cfg: AnalysisConfig, mode: str, *, api_key: str, start, end, now,
+                        completer, trace) -> RunSummary:
+    prompts = await resolve_all(PROMPT_SPECS)
+    for resolved in prompts.values():
+        if resolved.key in ("system", mode):
+            trace.use_prompt(resolved.key, resolved.info())
+    with trace.step("prepare", input={"modus": mode}) as step:
+        prepared = prepare(db, cfg, mode, start=start, end=end, prompts=prompts)
+        step["output"] = {"eingriffe": len(prepared.env.interventions),
+                          "assoziationen": len(prepared.associations),
+                          "prompt_zeichen": sum(len(m["content"]) for m in prepared.messages)}
     env = prepared.env
     store = Store(db)
     store.save_pseudonyms(env.pseudo.to_rows())
@@ -144,21 +174,35 @@ async def run_analysis(db: Database, cfg: AnalysisConfig, mode: str, *, api_key:
     prompt_hash = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16]
     params = {"von": to_utc_iso(env.start), "bis": to_utc_iso(env.end),
               "eingriffe": len(env.interventions), "prompt_zeichen": len(prompt_text)}
+    used = {key: resolved.version for key, resolved in prompts.items()
+            if key in ("system", mode) and resolved.version is not None}
+    if used:
+        params["prompt_versionen"] = used   # Langfuse-Versionen; ohne Angabe gilt der Prompt aus dem Code
     run_id = store.start_run(mode, cfg.model, params, now())
+    trace.metadata["run_id"] = run_id
     try:
         raws, result = await completer(cfg, prepared.messages, api_key)
         store.save_associations(run_id, prepared.associations)
-        candidates = parse_candidates(raws, prepared.parse_ctx)
+        with trace.step("parse_candidates", input=raws) as step:
+            candidates = parse_candidates(raws, prepared.parse_ctx)
+            step["output"] = [{"room": c.room, "trigger": c.trigger, "conditions": c.conditions,
+                               "action": c.action, "hypothesis": c.hypothesis, "status": c.status,
+                               "note": c.note} for c in candidates]
         tester = Backtester(cfg, env.interventions, env.ctx, env.start, env.end)
         counts: Counter[str] = Counter()
-        for candidate in candidates:
-            outcome = tester.evaluate(candidate) if candidate.status == STATUS_OPEN else None
-            if outcome is not None:
-                candidate.status, candidate.note = outcome.status, outcome.note
-            candidate_id = store.add_candidate(run_id, candidate)
-            if outcome is not None and outcome.metrics:
-                store.save_results(candidate_id, outcome.metrics)
-            counts[candidate.status] += 1
+        verdicts = []
+        with trace.step("backtest") as step:
+            for candidate in candidates:
+                outcome = tester.evaluate(candidate) if candidate.status == STATUS_OPEN else None
+                if outcome is not None:
+                    candidate.status, candidate.note = outcome.status, outcome.note
+                candidate_id = store.add_candidate(run_id, candidate)
+                if outcome is not None and outcome.metrics:
+                    store.save_results(candidate_id, outcome.metrics)
+                counts[candidate.status] += 1
+                verdicts.append({"id": candidate_id, "room": candidate.room, "status": candidate.status,
+                                 "note": candidate.note})
+            step["output"] = verdicts
         store.finish_run(run_id, "abgeschlossen", now(), prompt_hash=prompt_hash, prompt_text=prompt_text,
                          response_text=result.text, tokens_in=result.tokens_in,
                          tokens_out=result.tokens_out, cost_usd=result.cost_usd)
