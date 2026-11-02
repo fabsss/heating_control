@@ -195,6 +195,68 @@ async def test_gap_fill_logs_progress_and_writes_after_each_entity(cfg, db, fake
     assert any("Lückenabgleich 2/2" in m for m in messages)
 
 
+async def test_gap_fill_retries_when_history_is_not_ready_yet(cfg, db, fake_hass):
+    prepare(fake_hass, [entity_entry("input_boolean.a")])
+    calls: list[int] = []
+
+    def history(message):
+        calls.append(1)
+        return {"input_boolean.a": [{"s": "on", "a": {}, "lu": 1767261600.0}]}
+
+    del fake_hass.responses[HISTORY]            # History-Komponente noch nicht geladen: unknown_command
+    delays: list[float] = []
+
+    async def fake_sleep(seconds):
+        delays.append(seconds)
+        fake_hass.responses[HISTORY] = history  # nach dem ersten Warten ist sie da
+
+    client = HassClient(fake_hass.url, "secret")
+    await client.connect()
+    collector = make_collector(cfg, db, fake_hass, sleep=fake_sleep)
+    try:
+        await collector.sync_registry(client)
+        assert await collector.gap_fill(client) == 1
+    finally:
+        await client.close()
+    assert len(calls) == 1 and delays == [live.GAP_RETRY_DELAY_S]
+
+
+async def test_gap_fill_gives_up_without_crashing_when_history_stays_unavailable(cfg, db, fake_hass, caplog):
+    prepare(fake_hass, [entity_entry(f"input_boolean.{name}") for name in "abcd"])
+    del fake_hass.responses[HISTORY]
+    delays: list[float] = []
+
+    async def fake_sleep(seconds):
+        delays.append(seconds)
+
+    client = HassClient(fake_hass.url, "secret")
+    await client.connect()
+    collector = make_collector(cfg, db, fake_hass, sleep=fake_sleep)
+    try:
+        await collector.sync_registry(client)
+        with caplog.at_level("WARNING", logger="collector"):
+            assert await collector.gap_fill(client) == 0
+    finally:
+        await client.close()
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("abgebrochen" in m for m in messages)
+    assert sum("übersprungen" in m for m in messages) == live.GAP_MAX_SKIPPED_IN_ROW
+    assert len(delays) == (live.GAP_ATTEMPTS - 1) * live.GAP_MAX_SKIPPED_IN_ROW
+
+
+async def test_sync_registry_does_not_warn_about_missing_area(cfg, db, fake_hass, caplog):
+    prepare(fake_hass, [entity_entry("input_boolean.a", area_id=None)])
+    client = HassClient(fake_hass.url, "secret")
+    await client.connect()
+    collector = make_collector(cfg, db, fake_hass)
+    try:
+        with caplog.at_level("WARNING", logger="collector"):
+            await collector.sync_registry(client)
+    finally:
+        await client.close()
+    assert not caplog.records
+
+
 # --- Sitzung ---------------------------------------------------------------------
 
 async def test_run_session_records_events_and_flushes_on_close(cfg, db, fake_hass):
