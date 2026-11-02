@@ -23,12 +23,14 @@ from .rules import resolve_rule
 
 log = logging.getLogger("collector")
 
-ROOM_BOUND_KINDS = {"climate", "presence", "contact", "env"}
 HISTORY_DAYS = 180
 HEALTH_MAX_AGE_S = 600
 HEARTBEAT_INTERVAL_S = 30.0
 BACKOFF_START = 1.0
 BACKOFF_MAX = 60.0
+GAP_ATTEMPTS = 3              # Versuche je Entität, falls die History-Komponente noch nicht geladen ist
+GAP_RETRY_DELAY_S = 2.0
+GAP_MAX_SKIPPED_IN_ROW = 2    # danach Abbruch des Lückenabgleichs: die History ist offenbar nicht verfügbar
 
 
 def change_from_event(event: dict[str, Any]) -> Change | None:
@@ -135,8 +137,6 @@ class Collector:
         for info in infos:
             rule = resolve_rule(info, self.cfg)
             rules[info.entity_id] = rule
-            if info.area is None and rule.kind in ROOM_BOUND_KINDS:
-                log.warning("%s hat keinen Bereich in Home Assistant, die Raumzuordnung fehlt", info.entity_id)
             self.db.upsert_entity(rule, info.area, now)
             self.db.sync_room(info.entity_id, info.area, rule.kind, now)
         for entity_id in self.db.deactivate_missing(set(rules), now):
@@ -147,24 +147,45 @@ class Collector:
         log.info("Registry-Abgleich: %d Entitäten mit Label %s", len(rules), self.cfg.label)
         self._first_sync = False
 
+    async def _history(self, client: HassClient, entity_id: str, start: datetime, end: datetime) -> Any:
+        for attempt in range(1, GAP_ATTEMPTS + 1):
+            try:
+                return await client.command(
+                    "history/history_during_period",
+                    start_time=start.isoformat(),
+                    end_time=end.isoformat(),
+                    entity_ids=[entity_id],
+                    include_start_time_state=True,
+                    significant_changes_only=False,
+                    minimal_response=False,
+                    no_attributes=False,
+                )
+            except HassCommandError as exc:
+                if attempt == GAP_ATTEMPTS:
+                    raise
+                log.warning("History-Abfrage für %s fehlgeschlagen (%s), neuer Versuch %d/%d",
+                            entity_id, exc, attempt + 1, GAP_ATTEMPTS)
+                await self._sleep(GAP_RETRY_DELAY_S * attempt)
+
     async def gap_fill(self, client: HassClient) -> int:
         now = self._now()
         floor = now - timedelta(days=HISTORY_DAYS)
         total = 0
+        skipped_in_row = 0
         entity_ids = sorted(self.pipeline.rules)
         for number, entity_id in enumerate(entity_ids, start=1):
             log.info("Lückenabgleich %d/%d: %s", number, len(entity_ids), entity_id)
             start = max(self.db.last_ts(entity_id) or floor, floor)
-            result = await client.command(
-                "history/history_during_period",
-                start_time=start.isoformat(),
-                end_time=now.isoformat(),
-                entity_ids=[entity_id],
-                include_start_time_state=True,
-                significant_changes_only=False,
-                minimal_response=False,
-                no_attributes=False,
-            )
+            try:
+                result = await self._history(client, entity_id, start, now)
+            except HassCommandError as exc:
+                skipped_in_row += 1
+                log.warning("Lückenabgleich für %s übersprungen: %s", entity_id, exc)
+                if skipped_in_row >= GAP_MAX_SKIPPED_IN_ROW:
+                    log.warning("Lückenabgleich abgebrochen, die History-API ist nicht verfügbar")
+                    break
+                continue
+            skipped_in_row = 0
             changes = history_to_changes(entity_id, (result or {}).get(entity_id, []))
             for change in changes:
                 self.pipeline.handle(change, source="gap:history_api")
@@ -215,7 +236,7 @@ class Collector:
                 await self.run_session(client)
             except (HassAuthError, LabelNotFound, LabelEmpty):
                 raise
-            except (HassConnectionError, aiohttp.ClientError, OSError, asyncio.TimeoutError) as exc:
+            except (HassConnectionError, HassCommandError, aiohttp.ClientError, OSError, asyncio.TimeoutError) as exc:
                 log.warning("Verbindung zu Home Assistant verloren: %s", exc)
             finally:
                 await client.close()
