@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.32)
+  name: Heizungssteuerung (V4.33)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
 
@@ -219,8 +219,9 @@ blueprint:
       description: >
         Optional - Timer-Helper für diesen Raum. Wird bei einer manuellen Änderung am Heizkörper gestartet;
         solange er läuft, werden Zeitplan-Wechsel nicht angewendet und KI-Regeln mit demselben Timer pausieren.
-        Der Start ist unabhängig davon, ob der Zeitplan aktiv ist. Der Hold endet beim Ablauf (dann gilt wieder
-        der Zeitplan, falls aktiv), bei Sleep, beim nächtlichen Reset und beim Einschalten von Scheduler-Toggle oder Winter-Modus.
+        Der Start ist unabhängig davon, ob der Zeitplan aktiv ist. Der Hold ist nur eine Sperre: Beim Ablauf wird
+        nichts geschaltet, die Einstellung bleibt bis zum nächsten Ereignis stehen. Vorzeitig endet er bei Sleep,
+        beim nächtlichen Reset und beim Einschalten von Scheduler-Toggle oder Winter-Modus.
         Ohne Timer gibt es keinen Hold.
       default: []
       selector:
@@ -377,13 +378,12 @@ variables:
 
   # Soll die Zielrolle geschrieben werden?
   # - Sleep verlassen: immer (auch bei Away/Vacation/Winter-Modus aus), damit das Sleep-Preset nicht stehen bleibt
-  # - sonst nur bei aktiver Heizung: Sleep betreten, nächtlicher Reset, Toggle/Winter-Modus, Hold-Ende, Zeitplan-Wechsel
+  # - sonst nur bei aktiver Heizung: Sleep betreten, nächtlicher Reset, Toggle/Winter-Modus, Zeitplan-Wechsel
   apply_role: >-
     {{ leaving_sleep or (not heating_blocked and (
          entering_sleep
          or trigger.id == 'nightly_eco_time_trigger'
          or (trigger.id in ['scheduler_toggle_change', 'heating_toggle'] and is_scheduler_enabled and not in_sleep)
-         or (trigger.id == 'hold_finished' and is_scheduler_enabled and not in_sleep)
          or (trigger.id == 'schedule_change' and is_scheduler_enabled and not in_sleep and not hold_active and schedule_role_changed)
        )) }}
   # Hold beenden: Sleep, nächtlicher Reset, Einschalten von Scheduler-Toggle bzw. Winter-Modus
@@ -456,12 +456,8 @@ trigger:
     entity_id: !input heating_entities
     attribute: temperature
     id: "manual_change"
-  # Hold abgelaufen (nur bei natürlichem Ablauf, nicht bei Abbruch)
-  - platform: event
-    event_type: timer.finished
-    event_data:
-      entity_id: !input hold_timer
-    id: "hold_finished"
+  # Kein Trigger für den Ablauf des Holds: Er ist nur eine Sperre. Die manuelle Einstellung bleibt stehen,
+  # bis ein neues Ereignis kommt (Zeitplan-Wechsel, Sleep, nächtlicher Reset, Toggle).
 
 action:
   # --- HOLD-ERKENNUNG: manuelle Änderung startet den Hold-Timer ---

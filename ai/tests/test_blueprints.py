@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_heating_control_has_the_optional_ki_toggle():
     blueprint = load_blueprint(ROOT / "heating_control.yaml")
-    assert blueprint["blueprint"]["name"] == "Heizungssteuerung (V4.32)"
+    assert blueprint["blueprint"]["name"] == "Heizungssteuerung (V4.33)"
     field = blueprint["blueprint"]["input"]["ki_rules_toggle"]
     assert field["default"] == []
     assert field["selector"] == {"entity": {"domain": "input_boolean", "multiple": False}}
@@ -19,5 +19,12 @@ def test_heating_control_logic_does_not_use_the_toggle():
     body = {key: value for key, value in blueprint.items() if key != "blueprint"}
     dumped = json.dumps(body, default=str)
     assert "ki_rules_toggle" not in dumped
-    assert len(blueprint["trigger"]) == 11
+    assert len(blueprint["trigger"]) == 10
     assert blueprint["mode"] == "queued"
+
+
+def test_expiring_hold_writes_nothing():
+    """Der Hold ist nur eine Sperre: Sein Ablauf darf nichts schalten."""
+    blueprint = load_blueprint(ROOT / "heating_control.yaml")
+    assert not [t for t in blueprint["trigger"] if t.get("event_type") == "timer.finished"]
+    assert "hold_finished" not in blueprint["variables"]["apply_role"]
