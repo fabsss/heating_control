@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+from .prompt_registry import PromptSpec, ResolvedPrompt
+
 SYSTEM_PROMPT = """Du analysierst das Heizverhalten einer Wohnung und schlägst Regeln vor, die ein System später deterministisch ausführen kann.
 
 Grundlage sind verdichtete Daten über manuelle Eingriffe der Bewohner in die Raumtemperatur (Sollwert oder Preset) samt Kontext. Personen sind pseudonymisiert (person_1, person_2, ...), Räume stehen im Klartext. Alle Zeiten sind lokale Zeiten, Wochentage zählen von 0 (Montag) bis 6 (Sonntag).
@@ -45,13 +47,27 @@ MODE_INTROS = {
 }
 
 
+# Die Prompts der Prompt-Verwaltung (Name in Langfuse, Text aus dem Code)
+PROMPT_SPECS = [
+    PromptSpec("system", "heating/system", SYSTEM_PROMPT, ("max_candidates", "vocabulary")),
+    *(PromptSpec(mode, f"heating/mode-{mode}", intro) for mode, intro in MODE_INTROS.items()),
+]
+
+
 def build_messages(mode: str, data: dict, vocabulary: str, max_candidates: int, *,
-                   presets: list[str], flat_states: list[str], rooms: list[str]) -> list[dict]:
+                   presets: list[str], flat_states: list[str], rooms: list[str],
+                   prompts: dict[str, ResolvedPrompt] | None = None) -> list[dict]:
+    """``prompts``: aufgelöste Prompts aus der Prompt-Verwaltung, ohne Angabe gelten die aus dem Code."""
     if mode not in MODE_INTROS:
         raise ValueError(f"unbekannter Modus {mode!r}")
-    system = SYSTEM_PROMPT.replace("{max_candidates}", str(max_candidates)).replace("{vocabulary}", vocabulary)
+    if prompts:
+        system = prompts["system"].compile(max_candidates=max_candidates, vocabulary=vocabulary)
+        intro = prompts[mode].text
+    else:
+        system = SYSTEM_PROMPT.replace("{max_candidates}", str(max_candidates)).replace("{vocabulary}", vocabulary)
+        intro = MODE_INTROS[mode]
     user = "\n".join([
-        MODE_INTROS[mode],
+        intro,
         f"Bekannte Räume: {', '.join(rooms) or '-'}",
         f"Bekannte Presets: {', '.join(presets) or '-'}",
         f"Bekannte Wohnungszustände: {', '.join(flat_states) or '-'}",
