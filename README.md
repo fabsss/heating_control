@@ -2,7 +2,7 @@
 
 Ein leistungsstarkes und flexibles Blueprint zur automatischen Steuerung deiner Heizung basierend auf Anwesenheitsstatus, Zeitplänen und intelligenter Priorisierung.
 
-[![Version](https://img.shields.io/badge/Version-4.31-blue.svg)](https://github.com/fabsss/heating_control)
+[![Version](https://img.shields.io/badge/Version-4.32-blue.svg)](https://github.com/fabsss/heating_control)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-green.svg)](https://www.home-assistant.io/)
 [![Blueprint](https://img.shields.io/badge/Blueprint-Import-orange.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/fabsss/heating_control/blob/main/heating_control.yaml)
 
@@ -220,9 +220,9 @@ Erlaubt sind `comfort`, `eco` und `home_low`. Ohne Eintrag gilt Komfort (wie bis
 
 Mit einem **Hold-Timer** wird eine manuelle Änderung am Heizkörper (App, Dashboard oder am Gerät) für eine einstellbare Zeit (Standard 180 Minuten, gemeinsame Einstellung über den Helper "Hold-Dauer") nicht vom Zeitplan überschrieben.
 
-- **Start:** Eine Änderung von Preset oder Temperatur, die nicht von einer Automation stammt und vom Soll der aktuellen Rolle abweicht. Nur bei aktivem Scheduler und Heizsaison, nicht in `Sleep`.
-- **Solange der Hold läuft:** Zeitplan-Wechsel werden nicht angewendet.
-- **Ablauf:** Der Zeitplan wird neu bewertet und die Zielrolle gesetzt (auch während `Away`, dann nur als Preset).
+- **Start:** Eine Änderung von Preset oder Temperatur, die nicht von einer Automation stammt und vom Soll der aktuellen Rolle abweicht. Auch bei ausgeschaltetem Zeitplan (dann ist das Soll Eco); nur in der Heizsaison, nicht in `Vacation` oder `Sleep`.
+- **Solange der Hold läuft:** Zeitplan-Wechsel werden nicht angewendet, KI-Regeln mit demselben Timer pausieren.
+- **Ablauf:** Bei aktivem Zeitplan wird er neu bewertet und die Zielrolle gesetzt (auch während `Away`, dann nur als Preset). Bei ausgeschaltetem Zeitplan wird nichts geschrieben.
 - **Vorzeitiges Ende:** Sleep, nächtlicher Reset, Einschalten von Scheduler-Toggle oder Winter-Modus. `Away`/`Vacation` beenden den Hold **nicht**.
 - Ohne Hold-Timer gibt es keinen Hold (Verhalten wie bisher).
 
@@ -265,7 +265,7 @@ Dies garantiert, dass Temperaturänderungen immer funktionieren!
 2. **Automation anlegen**:
    - Gehe zu **Einstellungen → Automationen & Szenen**
    - **Automation erstellen** → **Blueprint verwenden**
-   - Wähle **Heizungssteuerung (V4.31)**
+   - Wähle **Heizungssteuerung (V4.32)**
 3. **Konfigurieren**:
    - Heizkörper auswählen
    - Anwesenheitsstatus-Helper zuweisen
@@ -336,7 +336,10 @@ Nächtliche Eco-Zeit: 01:00:00
 
 ## 🔄 Updates & Changelog
 
-### Version 4.31 (Aktuell)
+### Version 4.32 (Aktuell)
+- ✅ Hold-Timer startet auch bei ausgeschaltetem Zeitplan, damit KI-Regeln Handeingriffe respektieren
+
+### Version 4.31
 - 🐛 Hold-Timer: Eine reine Temperaturänderung am Heizkörper (Preset bleibt gleich, z.B. Drehen am Thermostat) wird jetzt als manueller Eingriff erkannt
 
 ### Version 4.30
