@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.30)
+  name: Heizungssteuerung (V4.31)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
 
@@ -398,7 +398,14 @@ variables:
       {%- set a = trigger.to_state.attributes -%}
       {%- set want = role_presets[target_role] -%}
       {%- if want != '' -%}
-        {{- (a.get('preset_mode') or '') | lower != want | lower -}}
+        {#- Preset-Name gleich, aber Temperatur verstellt: Better Thermostat behält den Namen, daher gegen die
+            hinterlegte Preset-Temperatur (Attribut preset_heat_temperatures, JSON-Text) prüfen. -#}
+        {%- set cur = (a.get('preset_mode') or '') | lower -%}
+        {%- set temps = a.get('preset_heat_temperatures') -%}
+        {%- set temps = (temps | from_json(default={})) if temps is string else (temps or {}) -%}
+        {%- set expected = temps.get(cur) -%}
+        {{- cur != want | lower
+            or (expected is not none and ((a.get('temperature') | float(0)) - (expected | float(0))) | abs > 0.01) -}}
       {%- else -%}
         {{- ((a.get('temperature') | float(0)) - (role_temps[target_role] | float(0))) | abs > 0.01 -}}
       {%- endif -%}
