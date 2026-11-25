@@ -1,5 +1,5 @@
 blueprint:
-  name: Heizungssteuerung (V4.31)
+  name: Heizungssteuerung (V4.32)
   description: >
     Steuert die Heizung basierend auf dem Anwesenheitsstatus. Priorisiert manuelle Eingriffe und behandelt Sonderfälle wie Gäste- und Urlaubsmodus.
 
@@ -218,8 +218,9 @@ blueprint:
       name: (Optional) Hold-Timer (manuelle Änderung)
       description: >
         Optional - Timer-Helper für diesen Raum. Wird bei einer manuellen Änderung am Heizkörper gestartet;
-        solange er läuft, werden Zeitplan-Wechsel nicht angewendet. Der Hold endet beim Ablauf (dann gilt wieder
-        der Zeitplan), bei Sleep, beim nächtlichen Reset und beim Einschalten von Scheduler-Toggle oder Winter-Modus.
+        solange er läuft, werden Zeitplan-Wechsel nicht angewendet und KI-Regeln mit demselben Timer pausieren.
+        Der Start ist unabhängig davon, ob der Zeitplan aktiv ist. Der Hold endet beim Ablauf (dann gilt wieder
+        der Zeitplan, falls aktiv), bei Sleep, beim nächtlichen Reset und beim Einschalten von Scheduler-Toggle oder Winter-Modus.
         Ohne Timer gibt es keinen Hold.
       default: []
       selector:
@@ -471,7 +472,7 @@ action:
       - if:
           - condition: template
             value_template: >-
-              {{ hold_timer != [] and is_scheduler_enabled and not heating_blocked and not in_sleep
+              {{ hold_timer != [] and not heating_blocked and not in_sleep
                  and trigger.from_state is not none
                  and trigger.from_state.state not in ['unavailable', 'unknown']
                  and trigger.to_state is not none
