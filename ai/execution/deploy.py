@@ -43,6 +43,7 @@ class HeatingRoom:
     winter_toggle: str | None
     schedule_entity: str | None
     nightly_time: str | None
+    hold_timer: str | None = None
 
 
 @dataclass(frozen=True)
@@ -99,7 +100,8 @@ class Deployer:
             raise DeployError(f"{room.heating_automation} enthält keinen Heizkörper oder Wohnungszustand")
         return HeatingRoom(room.heating_automation, heating, flat, _entity_input(inputs, "ki_rules_toggle"),
                            _entity_input(inputs, "heating_on_off"), _entity_input(inputs, "schedule_entity"),
-                           str(inputs.get("nightly_eco_time") or "01:00:00"))
+                           str(inputs.get("nightly_eco_time") or "01:00:00"),
+                           _entity_input(inputs, "hold_timer"))
 
     # --- init ------------------------------------------------------------------------------------
 
@@ -182,6 +184,8 @@ class Deployer:
         }
         if info.winter_toggle:
             inputs["winter_toggle"] = info.winter_toggle
+        if info.hold_timer:                 # derselbe Hold-Timer wie im Raum: Handeingriff gilt für Plan und KI
+            inputs["hold_timer"] = info.hold_timer
         # Die Hypothese stammt vom Modell und nennt Pseudonyme; sie bleibt in der Datenbank und geht nie nach Home Assistant.
         automation = {"alias": f"KI-Regel {rule_id}: {description}", "description": "",
                       "use_blueprint": {"path": self.cfg.blueprint_path, "input": inputs}}

@@ -2,7 +2,7 @@
 
 Ein leistungsstarkes und flexibles Blueprint zur automatischen Steuerung deiner Heizung basierend auf Anwesenheitsstatus, Zeitplänen und intelligenter Priorisierung.
 
-[![Version](https://img.shields.io/badge/Version-4.28-blue.svg)](https://github.com/fabsss/heating_control)
+[![Version](https://img.shields.io/badge/Version-4.30-blue.svg)](https://github.com/fabsss/heating_control)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-green.svg)](https://www.home-assistant.io/)
 [![Blueprint](https://img.shields.io/badge/Blueprint-Import-orange.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/fabsss/heating_control/blob/main/heating_control.yaml)
 
@@ -15,12 +15,13 @@ Ein leistungsstarkes und flexibles Blueprint zur automatischen Steuerung deiner 
 - **Intelligente Priorisierung**: Klare Hierarchie verhindert Konflikte zwischen verschiedenen Modi
 - **Smart Temperature Setting**: Thermostaten akzeptieren Temperaturänderungen auch im "Off"-Modus durch temporäres Einschalten
 - **Optionaler Winter-Modus**: Globaler An/Aus-Schalter für die gesamte Heizungslogik
-- **Zeitplansteuerung**: Flexibler Scheduler für Komfort-Temperatur zu definierten Zeiten
+- **Zeitplansteuerung**: Ein Zeitplan, mehrere Stufen: Komfort, Eco oder Home Low (Tagesabsenkung) je Block über "Additional data"
 
 ### 🚀 Erweiterte Features
 - **Office-Override**: Deaktiviert den Scheduler an Arbeitstagen im Büro
 - **Scheduler-Toggle**: Laufzeit-Steuerung des Schedulers per Input Boolean
-- **Nächtliche Eco-Umschaltung**: Automatische Absenkung im Guest Mode
+- **Nächtlicher Reset**: Setzt in jedem Wohnungszustand den Standardzustand (Sleep: Sleep-Preset, sonst Zeitplan-Stufe bzw. Eco)
+- **Hold bei manuellen Änderungen**: Eine manuelle Änderung am Heizkörper wird für eine einstellbare Zeit nicht vom Zeitplan überschrieben
 - **Template-Trigger-Technologie**: Zuverlässiges Triggern auch bei optionalen Entities
 - **Validierung**: Automatische Prüfung der Konfiguration mit Fehlerbenachrichtigungen
 
@@ -77,6 +78,13 @@ input_select:
 - Deaktiviert Scheduler an Arbeitstagen im Büro
 - Beispiel: Template-Sensor für Arbeitstage
 
+**Hold-Timer (timer)** - Optional, ein Timer pro Raum
+- Wird bei einer manuellen Änderung am Heizkörper gestartet (siehe [Hold](#-hold-bei-manuellen-änderungen))
+- Erstelle über: Einstellungen → Geräte & Dienste → Helfer → Timer (Option "Wiederherstellen" aktivieren)
+
+**Hold-Dauer (input_number)** - Optional, ein Helper für alle Räume
+- Dauer des Holds in Minuten (ohne Angabe: 180)
+
 ---
 
 ## ⚙️ Blueprint-Eingaben
@@ -92,21 +100,27 @@ input_select:
 
 | Eingabe | Standard | Beschreibung |
 |---------|----------|--------------|
-| **Eco-Preset** | kein Preset | (Optional) Preset der Climate-Entität (z.B. Better Thermostat) für Eco – hat Vorrang vor der Temperatur |
+| **Eco-Preset** | kein Preset | (Optional) Preset der Climate-Entität (z.B. Better Thermostat) für Eco (Basis-Zustand) – hat Vorrang vor der Temperatur |
 | **Komfort-Preset** | kein Preset | (Optional) Preset der Climate-Entität für Komfort – hat Vorrang vor der Temperatur |
-| **Eco-Temperatur** | 17°C | Fallback-Temperatur für Away, Sleep, nächtlicher Reset (wenn kein Preset gewählt/verfügbar) |
-| **Komfort-Temperatur** | 21°C | Fallback-Temperatur wenn Scheduler aktiv (wenn kein Preset gewählt/verfügbar) |
+| **Home-Low-Preset** | kein Preset | (Optional) Preset für die Tagesabsenkung (zuhause, aber kühler als Eco), z.B. `home` |
+| **Sleep-Preset** | kein Preset | (Optional) Preset für den Wohnungszustand `Sleep`. Ohne Angabe verhält sich Sleep wie Eco |
+| **Eco-Temperatur** | 17°C | Fallback-Temperatur für Eco: Zeitplan aus, nächtlicher Reset (wenn kein Preset gewählt/verfügbar) |
+| **Komfort-Temperatur** | 21°C | Fallback-Temperatur für Komfort (wenn kein Preset gewählt/verfügbar) |
+| **Home-Low-Temperatur** | 16°C | Fallback-Temperatur für die Tagesabsenkung |
+| **Sleep-Temperatur** | 0 (= Eco) | Fallback-Temperatur für Sleep; 0 verwendet die Eco-Temperatur |
 
-**Presets:** Die Dropdown-Liste bietet gängige Namen (`eco`, `comfort`, `away`, `sleep`, …); eigene Namen können frei eingegeben werden (exakt wie im Attribut `preset_modes` der Entität). Groß-/Kleinschreibung spielt keine Rolle; verwendet wird der echte Name aus `preset_modes`. Bietet die Entität das Preset nicht an, fällt das Blueprint auf die feste Temperatur zurück und zeigt eine persistente Benachrichtigung mit den verfügbaren Presets an.
+**Presets:** Die Dropdown-Liste bietet gängige Namen (`eco`, `comfort`, `away`, `sleep`, …); eigene Namen können frei eingegeben werden (exakt wie im Attribut `preset_modes` der Entität). Groß-/Kleinschreibung spielt keine Rolle; verwendet wird der echte Name aus `preset_modes`. Bietet die Entität das Preset nicht an, fällt das Blueprint auf die feste Temperatur zurück und zeigt eine persistente Benachrichtigung mit den verfügbaren Presets an. Presets werden auch bei ausgeschaltetem Thermostat gesetzt (Better Thermostat übernimmt sie beim Einschalten).
 
 ### Scheduler-Optionen (Optional)
 
 | Eingabe | Typ | Standard | Beschreibung |
 |---------|-----|----------|--------------|
 | **Scheduler aktivieren** | Boolean | `false` | Aktiviert die Zeitplan-Funktion |
-| **Zeitplan** | Schedule | - | Schedule Helper für Komfort-Zeiten ⚠️ |
+| **Zeitplan** | Schedule | - | Schedule Helper; je Block optional `preset: comfort`, `eco` oder `home_low` ⚠️ |
 | **Scheduler Toggle** | Input Boolean | - | Runtime-Steuerung (hat Vorrang) |
-| **Office-Override** | Binary Sensor | - | Deaktiviert Scheduler bei Arbeitstagen |
+| **Office-Override** | Binary Sensor | - | Deaktiviert Scheduler bei Arbeitstagen (es gilt dann Eco) |
+| **Hold-Timer** | Timer | - | Timer pro Raum für den Hold bei manuellen Änderungen |
+| **Hold-Dauer** | Input Number | 180 | Dauer des Holds in Minuten (gemeinsam für alle Räume) |
 
 ⚠️ **Wichtig**: Wenn "Scheduler aktivieren" = `true`, muss eine Zeitplan-Entity konfiguriert werden!
 
@@ -115,7 +129,7 @@ input_select:
 | Eingabe | Typ | Standard | Beschreibung |
 |---------|-----|----------|--------------|
 | **Heizung An/Aus** | Input Boolean | - | Globaler Winter-Modus Schalter |
-| **Nächtliche Eco-Zeit** | Time | 01:00 | Zeit für Eco-Umschaltung im Guest Mode |
+| **Nächtlicher Reset** | Time | 01:00 | Zeit für den Reset in jedem Wohnungszustand (Eingabe `nightly_eco_time`) |
 
 ---
 
@@ -145,18 +159,22 @@ Die Automation folgt einer **klaren Prioritätshierarchie**:
 - Status wechselt zu `Sleep`
 
 **Aktion:** 
-- Eco-Temperatur setzen
-- Smart Temperature Setting: Temporär einschalten falls nötig
+- Sleep-Preset setzen (ohne Sleep-Preset: Eco wie bisher; Temperatur-Fallback: Sleep-Temperatur, sonst Eco-Temperatur)
+- Ein laufender Hold endet
+
+**Beim Verlassen von `Sleep`** (in jeden anderen Zustand, auch `Away`, `Vacation` oder Winter-Modus aus) wird die Zielrolle (siehe unten) neu gesetzt, damit das Sleep-Preset nicht stehen bleibt: Zeitplan aktiv → Stufe des Blocks, sonst Eco. Bei `Away`/`Vacation` wird nur das Preset gesetzt, der Heizmodus bleibt wie von den übrigen Regeln bestimmt.
 
 ---
 
-### Priorität 4: 🌙 Nächtliche Eco-Umschaltung
+### Priorität 4: 🌙 Nächtlicher Reset
 **Bedingungen:**
-- Zeitpunkt = Konfigurierte "Nächtliche Eco-Zeit"
+- Zeitpunkt = Konfigurierter "Nächtlicher Reset"
+- Gilt in jedem Wohnungszustand, nicht bei Winter-Modus aus oder `Vacation` (dort bleibt die Heizung aus)
 
 **Aktion:**
-- Eco-Temperatur setzen
-- Bei Status `Home`: HVAC-Modus `heat`
+- Zielrolle setzen: bei `Sleep` das Sleep-Preset, sonst die Stufe des aktiven Zeitplan-Blocks bzw. Eco
+- Ein laufender Hold endet
+- Bei Status `Home`, `Guest Mode`, `Sleep`, `Leaving`, `Coming Home`: HVAC-Modus `heat`
 - Bei anderen Status: HVAC-Modus `off`
 
 ---
@@ -169,26 +187,52 @@ Die Automation folgt einer **klaren Prioritätshierarchie**:
 
 ---
 
-### Standard-Logik: 📅 Scheduler
+### Standard-Logik: 📅 Scheduler und Rollen
 
-**Komfort-Temperatur aktivieren wenn:**
-- Scheduler ist enabled (`scheduler_enabled = true` oder `scheduler_toggle = on`)
-- Schedule ist aktiv (`schedule_entity = on`)
-- Office-Override ist nicht aktiv oder nicht konfiguriert
-- Trigger war: `schedule_change`, `scheduler_toggle_change` oder `heating_toggle`
+Die Automation kennt vier **Rollen**. Jede hat ein Preset und eine Fallback-Temperatur:
 
-**Während `Sleep`** werden Scheduler-Wechsel nicht angewendet (Eco bleibt). Beim Verlassen von `Sleep` (→ `Home`, `Guest Mode`, `Coming Home`) wird Komfort nachgeholt, falls der Schedule dann aktiv ist; andernfalls bleibt Eco.
+| Rolle | Wann | Preset / Temperatur |
+|-------|------|---------------------|
+| **eco** (Basis) | Zeitplan aus, Scheduler deaktiviert, Office-Override, nächtlicher Reset | Eco-Preset / Eco-Temperatur |
+| **comfort** | Zeitplan-Block ohne Angabe oder mit `preset: comfort` | Komfort-Preset / Komfort-Temperatur |
+| **home_low** | Zeitplan-Block mit `preset: home_low` (Tagesabsenkung: zuhause, aber kühler als Eco) | Home-Low-Preset / Home-Low-Temperatur |
+| **sleep** | Wohnungszustand `Sleep` | Sleep-Preset / Sleep-Temperatur (ohne Angabe wie Eco) |
 
-**Eco-Temperatur aktivieren wenn:**
-- Scheduler ist enabled
-- Schedule ist **nicht** aktiv (`schedule_entity = off`)
-- Selbe Trigger-Bedingungen wie oben
+**Zeitplan-Block konfigurieren:** Beim Bearbeiten eines Blocks unter *Weitere Optionen → Additional data* eintragen:
+
+```yaml
+preset: home_low
+```
+
+Erlaubt sind `comfort`, `eco` und `home_low`. Ohne Eintrag gilt Komfort (wie bisher), ein unbekannter Wert löst eine Benachrichtigung aus und es gilt Komfort. Home Assistant stellt die Daten nur bei aktivem Block als Attribut bereit; ist kein Block aktiv, gilt Eco. Die Standard-Oberfläche des Zeitplans zeigt die Zusatzdaten nicht an (nur beim Öffnen des jeweiligen Blocks).
+
+**Wann wird geschrieben?** Nur bei einem **echten Wechsel der Rolle**. Grenzen zwei Blöcke mit gleicher Rolle aneinander, bleibt der Heizkörper unverändert. Der Zeitplan-Trigger reagiert auch auf Wechsel zwischen aneinandergrenzenden Blöcken (nur das Attribut ändert sich).
+
+**Weitere Auslöser:** Scheduler-Toggle und Winter-Modus (wenn sie die Steuerung einschalten), Ende des Holds.
+
+**Während `Sleep`** werden Scheduler-Wechsel nicht angewendet (das Sleep-Preset bleibt). Beim Verlassen von `Sleep` wird die Rolle neu berechnet (siehe Priorität 3).
+
+**Office-Override:** Ist er aktiv, verhält sich die Heizung, als gäbe es keinen Scheduler (Basis Eco, bei `Away` aus). Es wird dabei nichts aktiv geschrieben, bis ein anderer Auslöser kommt (wie bisher).
+
+---
+
+### 🖐️ Hold bei manuellen Änderungen
+
+Mit einem **Hold-Timer** wird eine manuelle Änderung am Heizkörper (App, Dashboard oder am Gerät) für eine einstellbare Zeit (Standard 180 Minuten, gemeinsame Einstellung über den Helper "Hold-Dauer") nicht vom Zeitplan überschrieben.
+
+- **Start:** Eine Änderung von Preset oder Temperatur, die nicht von einer Automation stammt und vom Soll der aktuellen Rolle abweicht. Nur bei aktivem Scheduler und Heizsaison, nicht in `Sleep`.
+- **Solange der Hold läuft:** Zeitplan-Wechsel werden nicht angewendet.
+- **Ablauf:** Der Zeitplan wird neu bewertet und die Zielrolle gesetzt (auch während `Away`, dann nur als Preset).
+- **Vorzeitiges Ende:** Sleep, nächtlicher Reset, Einschalten von Scheduler-Toggle oder Winter-Modus. `Away`/`Vacation` beenden den Hold **nicht**.
+- Ohne Hold-Timer gibt es keinen Hold (Verhalten wie bisher).
+
+> **Hinweis:** Die Erkennung "manuell" nutzt den Kontext der Statusänderung des Thermostats (keine Automation als Verursacher). Ob Better Thermostat diesen Kontext durchreicht, ist je nach Version unterschiedlich. Bitte nach der Einrichtung einmal testen: Preset in der App ändern → der Timer sollte starten.
 
 ---
 
 ## 🔧 Smart Temperature Setting
 
-Ein besonderes Feature für Thermostaten, die im "Off"-Modus keine Temperaturen akzeptieren:
+Ein besonderes Feature für Thermostaten, die im "Off"-Modus keine Temperaturen akzeptieren (gilt nur für den Temperatur-Fallback; Presets können auch im "Off"-Modus gesetzt werden):
 
 ```yaml
 1. Aktuellen HVAC-Modus speichern
@@ -221,7 +265,7 @@ Dies garantiert, dass Temperaturänderungen immer funktionieren!
 2. **Automation anlegen**:
    - Gehe zu **Einstellungen → Automationen & Szenen**
    - **Automation erstellen** → **Blueprint verwenden**
-   - Wähle **Heizungssteuerung (V4.28)**
+   - Wähle **Heizungssteuerung (V4.30)**
 3. **Konfigurieren**:
    - Heizkörper auswählen
    - Anwesenheitsstatus-Helper zuweisen
@@ -292,7 +336,16 @@ Nächtliche Eco-Zeit: 01:00:00
 
 ## 🔄 Updates & Changelog
 
-### Version 4.28 (Aktuell)
+### Version 4.30 (Aktuell)
+- ✅ Zeitplan mit mehreren Stufen: Block-Attribut `preset: comfort | eco | home_low` (ohne Angabe: Komfort, Zeitplan aus: Eco)
+- ✅ Neue Rolle Home Low (Tagesabsenkung) mit eigenem Preset und eigener Temperatur
+- ✅ Sleep setzt ein eigenes Sleep-Preset (ohne Angabe wie bisher Eco); beim Verlassen von Sleep wird die Rolle neu gesetzt
+- ✅ Nächtlicher Reset setzt die Zielrolle (Sleep, Zeitplan-Stufe oder Eco) statt fest Eco; Beschreibung korrigiert (gilt in jedem Wohnungszustand)
+- ✅ Hold-Timer: manuelle Änderungen werden für eine einstellbare Zeit nicht vom Zeitplan überschrieben
+- ✅ Zeitplan-Trigger reagiert auch auf Wechsel zwischen aneinandergrenzenden Blöcken; geschrieben wird nur bei echtem Rollenwechsel
+- ✅ Presets werden ohne kurzes Einschalten gesetzt; Temperatur-Fallback unverändert
+
+### Version 4.28
 - 🐛 Konfigurationsfehler "Scheduler ohne Zeitplan" bricht die Automation nicht mehr ab, sondern meldet nur noch (zuvor wurde z.B. `Away` nicht mehr verarbeitet)
 
 ### Version 4.27
