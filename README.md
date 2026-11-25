@@ -2,7 +2,7 @@
 
 Ein leistungsstarkes und flexibles Blueprint zur automatischen Steuerung deiner Heizung basierend auf Anwesenheitsstatus, Zeitplänen und intelligenter Priorisierung.
 
-[![Version](https://img.shields.io/badge/Version-4.30-blue.svg)](https://github.com/fabsss/heating_control)
+[![Version](https://img.shields.io/badge/Version-4.31-blue.svg)](https://github.com/fabsss/heating_control)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-green.svg)](https://www.home-assistant.io/)
 [![Blueprint](https://img.shields.io/badge/Blueprint-Import-orange.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/fabsss/heating_control/blob/main/heating_control.yaml)
 
@@ -265,7 +265,7 @@ Dies garantiert, dass Temperaturänderungen immer funktionieren!
 2. **Automation anlegen**:
    - Gehe zu **Einstellungen → Automationen & Szenen**
    - **Automation erstellen** → **Blueprint verwenden**
-   - Wähle **Heizungssteuerung (V4.30)**
+   - Wähle **Heizungssteuerung (V4.31)**
 3. **Konfigurieren**:
    - Heizkörper auswählen
    - Anwesenheitsstatus-Helper zuweisen
@@ -336,7 +336,10 @@ Nächtliche Eco-Zeit: 01:00:00
 
 ## 🔄 Updates & Changelog
 
-### Version 4.30 (Aktuell)
+### Version 4.31 (Aktuell)
+- 🐛 Hold-Timer: Eine reine Temperaturänderung am Heizkörper (Preset bleibt gleich, z.B. Drehen am Thermostat) wird jetzt als manueller Eingriff erkannt
+
+### Version 4.30
 - ✅ Zeitplan mit mehreren Stufen: Block-Attribut `preset: comfort | eco | home_low` (ohne Angabe: Komfort, Zeitplan aus: Eco)
 - ✅ Neue Rolle Home Low (Tagesabsenkung) mit eigenem Preset und eigener Temperatur
 - ✅ Sleep setzt ein eigenes Sleep-Preset (ohne Angabe wie bisher Eco); beim Verlassen von Sleep wird die Rolle neu gesetzt
