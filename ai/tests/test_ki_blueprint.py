@@ -14,7 +14,7 @@ INPUTS = dict(
     rule_id="r5", heating_entity="climate.bt", room_toggle="input_boolean.room", rule_toggle="switch.rule",
     stop_toggle="input_boolean.stop", flat_state="input_select.flat", blocked_states=["Vacation"],
     winter_toggle=[], heating_automation="automation.hc", last_intervention="input_datetime.li",
-    min_distance_min=60, setpoint_min=15, setpoint_max=25, delay_min=0, action_kind="preset",
+    hold_timer=[], min_distance_min=60, setpoint_min=15, setpoint_max=25, delay_min=0, action_kind="preset",
     action_preset="comfort", action_setpoint=21, rule_triggers=[], rule_conditions=[],
 )
 
@@ -94,6 +94,16 @@ def test_setpoint_already_set_and_clamped():
 def test_minimum_distance_to_the_last_intervention(minutes, reason):
     result = decide(attrs={"input_datetime.li": {"timestamp": minutes_ago(NOW, minutes)}})
     assert result["reason"] == reason
+
+
+def test_running_hold_timer_blocks_the_rule_like_a_manual_intervention():
+    result = decide(hold_timer="timer.hold", states={"timer.hold": "active"})
+    assert (result["reason"], result["will_act"]) == ("handeingriff", False)
+
+
+def test_idle_or_missing_hold_timer_does_not_block():
+    assert decide(hold_timer="timer.hold", states={"timer.hold": "idle"})["reason"] == ""
+    assert decide()["reason"] == ""
 
 
 def test_other_distance_is_configurable():

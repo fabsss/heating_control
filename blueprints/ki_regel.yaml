@@ -66,6 +66,15 @@ blueprint:
       selector:
         entity:
           domain: input_datetime
+    hold_timer:
+      name: (Optional) Hold-Timer von heating_control
+      description: >
+        Optional - Der Hold-Timer dieses Raums aus der Automation von heating_control. Solange er läuft (manuelle
+        Änderung), schaltet die Regel nicht (Grund "handeingriff"). Ohne Timer gilt nur der Mindestabstand.
+      default: []
+      selector:
+        entity:
+          domain: timer
     min_distance_min:
       name: Mindestabstand nach einem Eingriff (Minuten)
       default: 60
@@ -147,6 +156,7 @@ variables:
   winter_toggle: !input winter_toggle
   heating_automation: !input heating_automation
   last_intervention: !input last_intervention
+  hold_timer: !input hold_timer
   min_distance_min: !input min_distance_min
   setpoint_min: !input setpoint_min
   setpoint_max: !input setpoint_max
@@ -200,7 +210,8 @@ actions:
            else (temp_now is not none and ((temp_now | float(0)) - (target_value | float(0))) | abs < 0.01) }}
       since_intervention_min: >-
         {{ ((as_timestamp(now()) - (state_attr(last_intervention, 'timestamp') | float(0))) / 60) | round(1) }}
-      too_close: "{{ since_intervention_min < (min_distance_min | float(60)) }}"
+      hold_active: "{{ hold_timer != [] and is_state(hold_timer, 'active') }}"
+      too_close: "{{ since_intervention_min < (min_distance_min | float(60)) or hold_active }}"
       switches_on: >-
         {{ is_state(room_toggle, 'on') and is_state(rule_toggle, 'on') and is_state(stop_toggle, 'off') }}
       reason: >-

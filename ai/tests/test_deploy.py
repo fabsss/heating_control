@@ -87,6 +87,17 @@ async def test_deploy_without_a_winter_switch_omits_the_input(world):
     assert "winter_toggle" not in world.fake_rest.automations["homeai_rule_r1"]["use_blueprint"]["input"]
 
 
+async def test_deploy_passes_the_room_hold_timer_to_the_rule(world):
+    world.fake_rest.automations["hc_bad"]["use_blueprint"]["input"]["hold_timer"] = "timer.hold_bad"
+    await world.deployer.deploy(world.candidate_id)
+    assert world.fake_rest.automations["homeai_rule_r1"]["use_blueprint"]["input"]["hold_timer"] == "timer.hold_bad"
+
+
+async def test_deploy_without_a_hold_timer_omits_the_input(world):
+    await world.deployer.deploy(world.candidate_id)
+    assert "hold_timer" not in world.fake_rest.automations["homeai_rule_r1"]["use_blueprint"]["input"]
+
+
 async def test_deploy_refuses_candidates_that_did_not_pass(world):
     world.astore.set_candidate_status(world.candidate_id, "abgelehnt")
     world.astore.commit()
